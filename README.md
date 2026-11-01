@@ -1,3 +1,17 @@
+---
+pretty_name: gMART LLM stage benchmark
+language:
+  - ru
+tags:
+  - benchmark
+  - llm-evaluation
+  - structured-output
+  - urban-planning
+configs:
+  - config_name: requests
+    data_files: data/requests.jsonl
+---
+
 # gmart-llm-bench
 
 Бенчмарк LLM-этапов мультиагентной системы gMART: какая модель или комбинация моделей
