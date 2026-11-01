@@ -1,0 +1,42 @@
+endpoints:
+  vllm-dev:
+    backend: openai
+    base_url: ${BENCH_VLLM_URL:-http://localhost:8002/v1}
+    api_key: ${BENCH_VLLM_API_KEY:-}
+    timeout: 300
+    # qwen3 на vLLM отключает reasoning только через chat_template.
+    think_mode: chat_template
+    think_chat_template_kwarg: enable_thinking
+  vllm-gptoss:
+    backend: openai
+    base_url: ${BENCH_GPTOSS_URL:-http://localhost:8001/v1}
+    think_mode: reasoning_effort
+    # Harmony принимает только low|medium|high.
+    think_effort: low
+  ollama-local:
+    backend: ollama
+    host: ${BENCH_OLLAMA_URL:-http://localhost:11434}
+models:
+  qwen27b:
+    endpoint: vllm-dev
+    model: qwen3.8-27b
+  gptoss20b:
+    endpoint: vllm-gptoss
+    model: gpt-oss-20b
+  qwen14b:
+    endpoint: ollama-local
+    model: qwen3:14b
+    options: {num_ctx: 16384}
+profiles:
+  qwen27b-all:
+    default: qwen27b
+  mixed:
+    default: qwen27b
+    stages:
+      "scenario.*": qwen14b
+      "compliance.mapping*": qwen14b
+      chat_title: qwen14b
+run:
+  repeat: 1
+  concurrency: 2
+  stages: ["*"]

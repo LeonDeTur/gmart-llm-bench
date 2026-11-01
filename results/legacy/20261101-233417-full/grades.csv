@@ -1,0 +1,9 @@
+﻿profile,stage,case,repeat,model,grade,comment
+qwen27b-all,chat,raw_prompt_example,1,qwen27b,,
+qwen27b-all,chat_title,title_short_and_specific,1,qwen27b,,
+qwen27b-all,norms.answer,conflict_must_be_mentioned,1,qwen27b,,
+qwen27b-all,norms.answer,empty_context_admits_gap,1,qwen27b,,
+qwen27b-all,norms.answer,off_topic_rule_omitted,1,qwen27b,,
+qwen27b-all,norms.answer,placement_with_two_sources,1,qwen27b,,
+qwen27b-all,restriction.explain,explain_forest_buffer,1,qwen27b,,
+qwen27b-all,scenario.summary,indicators_comparison,1,qwen27b,,

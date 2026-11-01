@@ -1,0 +1,129 @@
+{
+  "exported_at": "2026-11-02T02:17:42",
+  "gmart": {
+    "commit": "0433b2452e1156690b5e8b018e355c55622a979b",
+    "branch": "feat/llm-stage-benchmark",
+    "dirty": true
+  },
+  "context_window": 32768,
+  "requests": 116,
+  "stages": {
+    "chat": {
+      "kind": "manual",
+      "description": "Произвольный запрос с готовыми сообщениями (снимок промпта)",
+      "scope": "Прямой вызов модели с messages/format/options из кейса."
+    },
+    "chat_title": {
+      "kind": "manual",
+      "description": "Название чата по первому запросу",
+      "scope": "BaseLlmService.generate_chat_title (одна попытка)."
+    },
+    "compliance.mapping": {
+      "kind": "auto",
+      "description": "Сопоставление групп объектов файла (теги) с типами из норм",
+      "scope": "EntityMapper._classify: только вызов модели, без табличных правил."
+    },
+    "compliance.mapping_reply": {
+      "kind": "auto",
+      "description": "Разбор ответа пользователя на вопрос о сопоставлениях",
+      "scope": "EntityMapper.resolve_reply; короткие «да/нет/2 — школа» разбираются кодом (поле llm_called)."
+    },
+    "compliance.scope": {
+      "kind": "auto",
+      "description": "Темы и документы, которыми пользователь сузил проверку",
+      "scope": "ComplianceScopeResolver._extract."
+    },
+    "compliance.scope_entities": {
+      "kind": "auto",
+      "description": "Выбор сущностей графа норм для темы проверки",
+      "scope": "ComplianceScopeResolver._topic_entities с кандидатами NormGraph из кейса."
+    },
+    "dvd.planner": {
+      "kind": "auto",
+      "description": "План поиска по документам IDU_DVD",
+      "scope": "RetrievalPlanner.build_plan: план модели до clamp и apply_scope (адрес и документ из запроса код подставляет сам)."
+    },
+    "norms.answer": {
+      "kind": "manual",
+      "description": "Ответ по найденным нормативным ограничениям (с цитатами и источниками)",
+      "scope": "NormGraphRagService._generate_answer, контекст — NormGraphContextBuilder."
+    },
+    "norms.planner": {
+      "kind": "auto",
+      "description": "Параметры запроса к графу норм NormGraph",
+      "scope": "NormGraphRetrievalPlanner.build_plan: план модели до детерминированного clamp."
+    },
+    "norms.review": {
+      "kind": "auto",
+      "description": "Критик ответа по нормам: обоснован ли ответ контекстом",
+      "scope": "Вызов модели NormGraphAnswerCritic без кодовой предпроверки чисел (ungrounded_quantities), чтобы измерить саму модель."
+    },
+    "orchestrator.plan": {
+      "kind": "auto",
+      "description": "Маршрутизация запроса между агентами (план шагов)",
+      "scope": "OrchestratorPlanBuilder.build_plan: план модели до детерминированных дополнений (сравнение документов, нормы+документы)."
+    },
+    "project.inputs": {
+      "kind": "auto",
+      "description": "Название проекта/сценария, профиль и политика объектов",
+      "scope": "project_params.extract_intent."
+    },
+    "provision.plan": {
+      "kind": "auto",
+      "description": "Режим и параметры расчёта обеспеченности",
+      "scope": "ProvisionPlanBuilder.build_plan: план модели до приведения названий к каталогу; пустой каталог решается кодом."
+    },
+    "pzz.columns": {
+      "kind": "auto",
+      "description": "Определение колонок ВРИ/индекса/названия зоны по атрибутам слоя",
+      "scope": "pzz_columns.detect_columns; точные алиасы колонок решаются кодом."
+    },
+    "pzz.inputs": {
+      "kind": "auto",
+      "description": "Режим проверки ПЗЗ, год и источник зон из запроса",
+      "scope": "PzzService._resolve_inputs без загрузок (иначе режим выводится кодом)."
+    },
+    "restriction.explain": {
+      "kind": "manual",
+      "description": "Объяснение пользователю выбранных параметров построения зон",
+      "scope": "RestrictionParserService.generate_plan_explanation."
+    },
+    "restriction.plan": {
+      "kind": "auto",
+      "description": "План построения буферов/ограничений по каталогам сценария",
+      "scope": "RestrictionPlanBuilder.build_plan: первый план модели, без канонизации названий и repair-проходов."
+    },
+    "scenario.candidates.assess": {
+      "kind": "auto",
+      "description": "Независимая проверка выбранных справочных типов",
+      "scope": "UrbanTypeMapper._assess_candidates — второй вызов resolve_candidates; на проверку подаются все кандидаты кейса, включая неверные."
+    },
+    "scenario.candidates.select": {
+      "kind": "auto",
+      "description": "Отбор справочных типов из кандидатов под запрос",
+      "scope": "UrbanTypeMapper._select_candidates — первый из двух вызовов resolve_candidates."
+    },
+    "scenario.judge": {
+      "kind": "auto",
+      "description": "Судья ответа по данным сценария: достаточен ли ответ",
+      "scope": "ScenarioDataEvaluator._judge без детерминированных проверок перед ним."
+    },
+    "scenario.request": {
+      "kind": "auto",
+      "description": "Намерение запроса к данным сценария: операция и тип сущности",
+      "scope": "UrbanTypeMapper.classify_scenario_entity_request (без кавычек в запросе — иначе тип берётся кодом)."
+    },
+    "scenario.select": {
+      "kind": "auto",
+      "description": "Выбор типа сущности из каталога сценария",
+      "scope": "UrbanTypeMapper.select_scenario_entities; точное совпадение названия решается кодом без модели (поле llm_called)."
+    },
+    "scenario.summary": {
+      "kind": "manual",
+      "description": "Сводка сравнения показателей сценариев по посчитанным фактам",
+      "scope": "scenario_data_summary.summarize_comparison без кодовой проверки чисел текста."
+    }
+  },
+  "decided_by_code": [],
+  "errors": {}
+}

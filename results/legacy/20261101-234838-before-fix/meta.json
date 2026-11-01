@@ -1,0 +1,23 @@
+{
+  "started": "2026-11-01T23:48:38",
+  "config": "benchmarks/config.yaml",
+  "profiles": [
+    "qwen27b-all"
+  ],
+  "profile_models": {
+    "qwen27b-all": {
+      "default": "qwen27b",
+      "stages": {}
+    }
+  },
+  "models": {
+    "qwen27b": {
+      "endpoint": "vllm-dev",
+      "model": "qwen3.8-27b",
+      "options": {}
+    }
+  },
+  "cases": 8,
+  "repeat": 1,
+  "temperature": 0.0
+}
