@@ -1,12 +1,12 @@
 {
-  "exported_at": "2026-11-02T02:17:42",
+  "exported_at": "2026-11-02T14:00:59",
   "gmart": {
-    "commit": "0433b2452e1156690b5e8b018e355c55622a979b",
+    "commit": "68534ab3dbb2aaccf548610dbfb7e5b7fa14a709",
     "branch": "feat/llm-stage-benchmark",
-    "dirty": true
+    "dirty": false
   },
   "context_window": 32768,
-  "requests": 116,
+  "requests": 300,
   "stages": {
     "chat": {
       "kind": "manual",

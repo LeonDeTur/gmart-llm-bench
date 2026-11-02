@@ -47,6 +47,19 @@ llmbench run --config config.yaml --repeat 3 --label stability     # оценк�
 Профили прогоняются по очереди (общий сервер под двумя моделями сразу исказил бы
 латентность), кейсы внутри профиля — параллельно (`run.concurrency`).
 
+### Контрольный набор
+
+Примерно пятая часть кейсов помечена тегом `holdout`. При подборе моделей, параметров или
+промптов их не запускают, а прогоняют только для проверки итогового выбора — так оценка не
+подгоняется под те же кейсы, по которым её сообщают:
+
+```bash
+llmbench run --config config.yaml --exclude-tags holdout --label tuning   # при подборе
+llmbench run --config config.yaml --tags holdout --label final            # итоговая проверка
+```
+
+`run.exclude_tags` в `config.yaml` действует так же, как `--exclude-tags`.
+
 ## Результаты
 
 `results/<дата-время>[-label]/`:

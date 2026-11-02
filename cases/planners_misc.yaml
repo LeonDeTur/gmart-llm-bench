@@ -97,7 +97,8 @@ cases:
       scenario_id: 1001
       user_query: "Проверь здания сценария по зонам из OSM за 2026 год"
     expect:
-      - {path: mode, eq: scenario}
+      # null допустим: при выбранном сценарии код сам выбирает режим scenario.
+      - {path: mode, not_in: [pzz_check, classify_only, building_pzz_check]}
       - {path: year, eq: 2026}
       - {path: source, eq: OSM}
 
@@ -113,7 +114,7 @@ cases:
       scenario_id: 1001
       user_query: "Проверь сценарий на соответствие ПЗЗ"
     expect:
-      - {path: mode, eq: scenario}
+      - {path: mode, not_in: [pzz_check, classify_only, building_pzz_check]}
       - {path: year, "null": true}
       - {path: source, "null": true}
 
@@ -172,3 +173,312 @@ cases:
     expect:
       - {path: project_name, eq: "Сосновка"}
       - {path: profile, eq: residential_individual}
+
+  - id: replace_same_objects
+    stage: project.inputs
+    input:
+      profiles: *profiles
+      user_query: "Создай проект «Набережная» из файлов, такие же существующие объекты замени"
+    expect:
+      - {path: project_name, eq: "Набережная"}
+      - {path: existing_objects, eq: replace_same}
+      - {path: scenario_name, "null": true}
+
+  - id: business_profile
+    stage: project.inputs
+    input:
+      profiles: *profiles
+      user_query: "Загрузи слои как проект «Технопарк» с общественно-деловой застройкой"
+    expect:
+      - {path: project_name, eq: "Технопарк"}
+      - {path: profile, eq: business}
+
+  - id: scenario_name_only
+    stage: project.inputs
+    input:
+      profiles: *profiles
+      user_query: "Сделай из этих файлов сценарий «Вариант Б»"
+    expect:
+      - {path: scenario_name, eq: "Вариант Б"}
+      - {path: project_name, "null": true}
+
+  - id: housing_without_profile
+    stage: project.inputs
+    tags: [holdout]
+    input:
+      profiles: *profiles
+      user_query: "Создай проект «Парковый» из файлов, там в основном жилые дома"
+    expect:
+      - {path: project_name, eq: "Парковый"}
+      - {path: profile, "null": true}
+
+  - id: followup_name_from_answer
+    stage: project.inputs
+    tags: [history]
+    input:
+      profiles: *profiles
+      history:
+        - {role: user, content: "Создай проект из загруженных файлов"}
+        - {role: assistant, content: "Как назвать проект и что сделать с существующими объектами внутри границы?"}
+      user_query: "«Заречье», существующие объекты оставь"
+    expect:
+      - {path: project_name, eq: "Заречье"}
+      - {path: existing_objects, eq: keep}
+
+  # ---------------- pzz.inputs (дополнительно) ----------------
+  - id: parcels_and_zones_files
+    stage: pzz.inputs
+    input: {user_query: "Проверь загружаемые участки по файлу зон ПЗЗ"}
+    expect:
+      - {path: mode, eq: pzz_check}
+
+  - id: building_files
+    stage: pzz.inputs
+    input: {user_query: "Проверь мои файлы зданий на соответствие зонам ПЗЗ"}
+    expect:
+      - {path: mode, eq: building_pzz_check}
+
+  - id: user_zones_with_year
+    stage: pzz.inputs
+    input:
+      scenario_id: 1001
+      user_query: "Проверь сценарий по пользовательским зонам за 2024 год"
+    expect:
+      - {path: mode, not_in: [pzz_check, classify_only, building_pzz_check]}
+      - {path: year, eq: 2024}
+      - {path: source, eq: User}
+
+  - id: source_without_year
+    stage: pzz.inputs
+    tags: [holdout]
+    input:
+      scenario_id: 1001
+      user_query: "Проверь сценарий по зонам OSM"
+    expect:
+      - {path: source, eq: OSM}
+      - {path: year, "null": true}
+
+  - id: followup_year_and_source
+    stage: pzz.inputs
+    tags: [history]
+    input:
+      scenario_id: 1001
+      history:
+        - {role: user, content: "Проверь сценарий на соответствие ПЗЗ"}
+        - {role: assistant, content: "Укажите год и источник зон: User, OSM или PZZ."}
+      user_query: "2025, OSM"
+    expect:
+      - {path: year, eq: 2025}
+      - {path: source, eq: OSM}
+
+  # ---------------- norms.planner (дополнительно) ----------------
+  - id: applicable_gas_station
+    stage: norms.planner
+    input: {user_query: "Что нельзя размещать рядом с автозаправочной станцией?"}
+    expect:
+      - {path: primary_tool, eq: applicable}
+      - {path: object, contains: ["автозаправ"]}
+
+  - id: distance_industry_housing
+    stage: norms.planner
+    input: {user_query: "Какое минимальное расстояние от промышленных предприятий до жилой застройки?"}
+    expect:
+      - {path: primary_tool, eq: search}
+      - {path: search_query, contains_any: ["расстояни", "санитарно-защит"]}
+      - {path: document_names, "null": true}
+
+  - id: related_norms_neighbors
+    stage: norms.planner
+    tags: [holdout]
+    input: {user_query: "Какие ещё нормы связаны с санитарно-защитными зонами промышленных предприятий?"}
+    expect:
+      - {path: neighbors_depth, gte: 1}
+
+  - id: overview_kindergartens
+    stage: norms.planner
+    input: {user_query: "Какие ограничения действуют на детские сады?"}
+    expect:
+      - {path: primary_tool, eq: applicable}
+      - {path: object, contains: ["детск"]}
+      - {path: limit, gte: 10}
+
+  - id: named_document_sp42
+    stage: norms.planner
+    input: {user_query: "Что СП 42.13330 говорит о расстоянии между жилыми домами?"}
+    expect:
+      - {path: "document_names.0", contains: ["42.13330"]}
+      - {path: search_query, contains: ["расстояни"]}
+
+  - id: two_sources_compared_conflicts
+    stage: norms.planner
+    tags: [holdout]
+    input: {user_query: "Сравни требования СП 42 и региональных нормативов к расстоянию от школ до магистральных улиц"}
+    expect:
+      - {path: check_conflicts, eq: true}
+
+  - id: definition_plain
+    stage: norms.planner
+    input: {user_query: "Что такое санитарно-защитная зона?"}
+    expect:
+      - {path: primary_tool, eq: search}
+      - {path: document_names, "null": true}
+      - {path: check_conflicts, eq: false}
+      - {path: neighbors_depth, eq: 0}
+
+  - id: revision_after_critique
+    stage: norms.planner
+    input:
+      user_query: "На каком расстоянии от АЗС можно размещать школу?"
+      prev_query: "ограничения школ"
+      prev_critique: "В контексте нет норм о расстоянии от школ до автозаправочных станций."
+    expect:
+      - {path: search_query, ne: "ограничения школ"}
+      - {path: search_query, contains_any: ["АЗС", "автозаправ"]}
+
+  - id: followup_new_object
+    stage: norms.planner
+    tags: [history, holdout]
+    input:
+      history:
+        - {role: user, content: "Какие ограничения действуют на школы?"}
+        - {role: assistant, content: "Для школ найдены ограничения по расстоянию до магистральных улиц и жилых домов."}
+      user_query: "А на детские сады?"
+    expect:
+      - {path: primary_tool, eq: applicable}
+      - {path: object, contains: ["детск"]}
+
+  # ---------------- dvd.planner (дополнительно) ----------------
+  - id: clause_range
+    stage: dvd.planner
+    input: {user_query: "Покажи пункты 3.3–3.5 СП 42.13330"}
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: pattern, contains: ["3.3", "3.5"]}
+      - {path: allow_multiple, eq: true}
+
+  - id: section_children_mask
+    stage: dvd.planner
+    tags: [holdout]
+    input: {user_query: "Выведи все подпункты раздела 7 СП 59.13330"}
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: pattern, regex: "^7(\\.\\*)?$"}
+      - {path: "document_names.0", contains: ["59.13330"]}
+
+  - id: topic_inside_section
+    stage: dvd.planner
+    input: {user_query: "Что в разделе 5 СП 42.13330 говорится о парковках?"}
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: rank_by_relevance, eq: true}
+      - {path: search_query, contains: ["парков"]}
+
+  - id: term_by_name
+    stage: dvd.planner
+    input: {user_query: "Найди определение термина «красная линия»"}
+    expect:
+      - {path: retrieval_mode, eq: name}
+      - {path: name_query, contains: ["красн"]}
+
+  - id: document_and_topic
+    stage: dvd.planner
+    input: {user_query: "Что СанПиН 1.2.3685-21 требует по уровню шума в жилых помещениях?"}
+    expect:
+      - {path: retrieval_mode, eq: semantic}
+      - {path: "document_names.0", contains: ["1.2.3685-21"]}
+      - {path: search_query, contains: ["шум"]}
+      - {path: alternative_queries, min_len: 1}
+
+  - id: whole_editions_comparison
+    stage: dvd.planner
+    tags: [holdout]
+    input: {user_query: "Сравни редакции СП 42.13330 2011 и 2016 годов"}
+    expect:
+      - {path: intent, eq: document_comparison}
+      - {path: comparison_topic, "null": true}
+      - {path: "comparison_left.name", contains: ["42.13330"]}
+
+  - id: followup_next_clause
+    stage: dvd.planner
+    tags: [history]
+    input:
+      history:
+        - {role: user, content: "Что сказано в пункте 3.3 СП 55?"}
+        - {role: assistant, content: "В пункте 3.3 СП 55 приведено определение блокированного жилого дома."}
+      user_query: "А в пункте 4.1?"
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: pattern, eq: "4.1"}
+      - {path: "document_names.0", contains: ["СП 55"]}
+
+  - id: table_requested
+    stage: dvd.planner
+    input: {user_query: "Найди таблицу нормативов обеспеченности стоянками в СП 42.13330"}
+    expect:
+      - {path: kind, eq: table}
+      - {path: types, "null": true}
+
+  - id: orchestrator_task_suffix
+    stage: dvd.planner
+    tags: [holdout]
+    input:
+      user_query: "Сколько школ в сценарии и что СП 251 говорит о расстоянии от школ до жилых домов?\nЗадача: найди в СП 251 требования к расстоянию от школ до жилых домов"
+    expect:
+      - {path: intent, eq: norm}
+      - {path: search_query, contains: ["школ"]}
+      - {path: search_query, not_regex: "сколько|сценари"}
+
+  - id: document_list_topic_not_action
+    stage: dvd.planner
+    input: {user_query: "Найди документы, в которых есть требования к постройке школ"}
+    expect:
+      - {path: intent, eq: document_list}
+      - {path: search_query, contains: ["школ"]}
+      - {path: search_query, not_regex: "^\\s*найд|документ"}
+      - {path: limit, gte: 15}
+
+  - id: one_named_edition
+    stage: dvd.planner
+    input: {user_query: "Чем редакция СП 42.13330.2016 отличается от действующей?"}
+    expect:
+      - {path: intent, eq: document_comparison}
+      - {path: "comparison_right.version", "null": true}
+
+  - id: appendix_path
+    stage: dvd.planner
+    input: {user_query: "Покажи пункт 2 приложения А СП 42.13330"}
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: pattern, contains: ["А"]}
+      - {path: "document_names.0", contains: ["42.13330"]}
+
+  - id: informal_clause_reference
+    stage: dvd.planner
+    tags: [holdout]
+    input: {user_query: "что в п 7.5 сп42"}
+    expect:
+      - {path: retrieval_mode, eq: structure}
+      - {path: pattern, eq: "7.5"}
+      - {path: "document_names.0", contains: ["42"]}
+
+  - id: own_document_vs_shared
+    stage: dvd.planner
+    input: {user_query: "Сравни мой загруженный документ «Регламент ЖК Север» с СП 42.13330"}
+    expect:
+      - {path: intent, eq: document_comparison}
+      - {path: "comparison_left.name", contains: ["Север"]}
+      - {path: "comparison_left.owner", eq: user}
+
+  - id: kind_not_invented
+    stage: norms.planner
+    tags: [holdout]
+    input: {user_query: "Какая высота зданий допустима рядом с аэродромом?"}
+    expect:
+      - {path: kind, "null": true}
+      - {path: document_names, "null": true}
+
+  - id: classify_with_year_mentioned
+    stage: pzz.inputs
+    input: {user_query: "Сначала классифицируй участки, проверка зон не нужна, участки за 2024 год"}
+    expect:
+      - {path: mode, eq: classify_only}

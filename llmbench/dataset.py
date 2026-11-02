@@ -123,6 +123,7 @@ def select(
     stages: list[str] | None = None,
     ids: list[str] | None = None,
     tags: list[str] | None = None,
+    exclude_tags: list[str] | None = None,
 ) -> list[BenchCase]:
     return [
         case
@@ -136,4 +137,5 @@ def select(
             )
         )
         and (not tags or set(tags).intersection(case.tags))
+        and not set(exclude_tags or ()).intersection(case.tags)
     ]

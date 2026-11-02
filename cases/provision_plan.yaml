@@ -17,10 +17,12 @@ cases:
       - {path: mode, eq: effects}
       - {path: service_name, eq: "Детский сад"}
 
+  # Промпт противоречив: provision — «без упоминания эффектов», а при неясности велит
+  # выбирать effects. Режим здесь не оценивается, только сервис.
   - id: ambiguous_single_service_defaults_to_effects
     input: {user_query: "Расскажи про обеспеченность поликлиниками в проекте"}
     expect:
-      - {path: mode, eq: effects}
+      - {path: mode, in: [effects, provision]}
       - {path: service_name, eq: "Поликлиника"}
 
   - id: summary_all_services
@@ -63,7 +65,7 @@ cases:
     input: {user_query: "Какая обеспеченность бассейнами?"}
     expect:
       - {path: mode, eq: needs_clarification}
-      - {path: mode, eq: needs_clarification}
+      - {path: clarification_question, "null": false}
 
   - id: target_population_explicit
     input: {user_query: "Рассчитай эффекты по школам для населения 45 000 человек"}
@@ -101,3 +103,155 @@ cases:
       - {path: mode, eq: effects}
       - {path: service_name, eq: "Детский сад"}
       - {path: target_population, eq: 25000}
+
+  - id: effects_after_project_clinics
+    input: {user_query: "Что будет с обеспеченностью поликлиниками после реализации проекта?"}
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Поликлиника"}
+
+  - id: effects_calc_sports_hall
+    tags: [holdout]
+    input: {user_query: "Рассчитай эффекты обеспеченности спортивными залами"}
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Спортивный зал"}
+
+  - id: provision_pharmacy_current
+    input: {user_query: "Покажи текущую обеспеченность аптеками"}
+    expect:
+      - {path: mode, eq: provision}
+      - {path: service_name, eq: "Аптека"}
+
+  - id: effects_summary_two_services
+    input: {user_query: "Как проект повлияет на обеспеченность школами и детскими садами?"}
+    expect:
+      - {path: mode, eq: effects_summary}
+      - {path: service_names, set_eq: ["Школа", "Детский сад"]}
+      - {path: service_name, "null": true}
+
+  - id: summary_best_served
+    tags: [holdout]
+    input: {user_query: "Какими сервисами население обеспечено лучше всего?"}
+    expect:
+      - {path: mode, eq: summary}
+      - {path: service_names, len: 0}
+
+  - id: list_for_analysis
+    input: {user_query: "Что доступно для анализа обеспеченности?"}
+    expect:
+      - {path: mode, eq: list_services}
+
+  - id: summary_with_population
+    input: {user_query: "Дай сводку обеспеченности для 12 000 жителей"}
+    expect:
+      - {path: mode, eq: summary}
+      - {path: target_population, eq: 12000}
+
+  - id: effects_summary_with_layers
+    tags: [holdout]
+    input: {user_query: "Сравни обеспеченность всеми сервисами до и после проекта и покажи на карте слои спортивных залов"}
+    expect:
+      - {path: mode, eq: effects_summary}
+      - {path: service_names, len: 0}
+      - {path: layer_service_names, eq: ["Спортивный зал"]}
+
+  - id: unknown_service_effects
+    tags: [clarification]
+    input: {user_query: "Как проект повлияет на обеспеченность библиотеками?"}
+    expect:
+      - {path: mode, eq: needs_clarification}
+      - {path: service_name, "null": true}
+      - {path: clarification_question, "null": false}
+
+  - id: followup_switch_service
+    tags: [history]
+    input:
+      history:
+        - {role: user, content: "Как проект повлияет на обеспеченность школами?"}
+        - {role: assistant, content: "После реализации проекта обеспеченность школами вырастет с 72% до 85%."}
+      user_query: "А для аптек?"
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Аптека"}
+
+  - id: followup_switch_to_effects
+    tags: [history]
+    input:
+      history:
+        - {role: user, content: "Какая обеспеченность детскими садами?"}
+        - {role: assistant, content: "Обеспеченность детскими садами — 64%, дефицит 210 мест."}
+      user_query: "А как на это повлияет проект?"
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Детский сад"}
+
+  - id: population_with_thousands_space
+    tags: [holdout]
+    input: {user_query: "Какая обеспеченность детскими садами при численности населения 8 500 человек?"}
+    expect:
+      - {path: mode, eq: provision}
+      - {path: service_name, eq: "Детский сад"}
+      - {path: target_population, eq: 8500}
+
+  - id: summary_subset_no_layers
+    input: {user_query: "Сводка обеспеченности по поликлиникам и аптекам"}
+    expect:
+      - {path: mode, eq: summary}
+      - {path: service_names, set_eq: ["Поликлиника", "Аптека"]}
+      - {path: layer_service_names, len: 0}
+
+  - id: off_topic_needs_clarification
+    tags: [clarification]
+    input: {user_query: "Построй мне маршрут до ближайшей школы"}
+    expect:
+      - {path: mode, eq: needs_clarification}
+
+  - id: followup_summary_population
+    tags: [history, holdout]
+    input:
+      history:
+        - {role: user, content: "Дай сводку по обеспеченности сервисами"}
+        - {role: assistant, content: "Хуже всего территория обеспечена поликлиниками (41%) и спортивными залами (48%)."}
+      user_query: "Пересчитай для 50000 жителей"
+    expect:
+      - {path: mode, eq: summary}
+      - {path: target_population, eq: 50000}
+
+  - id: effects_summary_improves_most
+    input: {user_query: "Какие сервисы проект улучшит сильнее всего?"}
+    expect:
+      - {path: mode, eq: effects_summary}
+      - {path: service_names, len: 0}
+
+  - id: scenario_word_not_a_service
+    input: {user_query: "Какая обеспеченность спортивными залами в сценарии?"}
+    expect:
+      - {path: mode, eq: provision}
+      - {path: service_name, eq: "Спортивный зал"}
+
+  - id: typos_in_service
+    tags: [holdout]
+    input: {user_query: "Какая обеспеченость поликлинниками?"}
+    expect:
+      - {path: mode, eq: provision}
+      - {path: service_name, eq: "Поликлиника"}
+
+  - id: followup_keeps_population
+    tags: [history, holdout]
+    input:
+      history:
+        - {role: user, content: "Как проект повлияет на обеспеченность школами при 20000 жителей?"}
+        - {role: assistant, content: "При 20000 жителей обеспеченность школами после проекта — 91%."}
+      user_query: "А для детских садов?"
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Детский сад"}
+      - {path: target_population, eq: 20000}
+
+  - id: single_service_layers_not_summary
+    input: {user_query: "Покажи на карте, как проект повлияет на обеспеченность аптеками"}
+    expect:
+      - {path: mode, eq: effects}
+      - {path: service_name, eq: "Аптека"}
+      - {path: layer_service_names, len: 0}

@@ -64,6 +64,8 @@ def test_join_and_select(tmp_path):
     assert case.input == {"nested": {"a": 1, "b": 2}, "list": [1]}
     assert len(select(dataset.cases, ["stage.*"], ["stage.one/ok"], ["smoke"])) == 1
     assert not select(dataset.cases, tags=["unknown"])
+    assert not select(dataset.cases, exclude_tags=["smoke"])
+    assert len(select(dataset.cases, exclude_tags=["unknown"])) == len(dataset.cases)
 
 
 def test_merge_sha():

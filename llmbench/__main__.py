@@ -33,8 +33,8 @@ def _parser():
     listing.add_argument("--root", type=Path, default=ROOT)
     run = sub.add_parser("run", help="Запустить бенчмарк")
     run.add_argument("--config", required=True, type=Path)
-    for name in ("profiles", "models", "stages", "cases", "tags", "label"):
-        run.add_argument(f"--{name}")
+    for name in ("profiles", "models", "stages", "cases", "tags", "exclude_tags", "label"):
+        run.add_argument(f"--{name.replace('_', '-')}", dest=name)
     for name in ("repeat", "concurrency"):
         run.add_argument(f"--{name}", type=int)
     run.add_argument("--case-timeout", type=float, default=900)
@@ -66,6 +66,7 @@ def _run(args):
         _csv(args.stages) or config.stages,
         _csv(args.cases),
         _csv(args.tags) or config.tags,
+        _csv(args.exclude_tags) or config.exclude_tags,
     )
     for case in selected:
         if case.status != "ok":

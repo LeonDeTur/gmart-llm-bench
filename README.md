@@ -64,6 +64,19 @@ llmbench run --config config.yaml --repeat 3 --label stability     # measure sta
 Profiles run one after another (two models on one shared server at once would distort latency);
 cases within a profile run in parallel (`run.concurrency`).
 
+### Holdout set
+
+About a fifth of the cases carry the `holdout` tag. Leave them out while choosing models,
+parameters or prompts, and run them only to confirm the final choice, so the score is not fitted
+to the cases it is reported on:
+
+```bash
+llmbench run --config config.yaml --exclude-tags holdout --label tuning   # while tuning
+llmbench run --config config.yaml --tags holdout --label final            # final check
+```
+
+`run.exclude_tags` in `config.yaml` does the same as `--exclude-tags`.
+
 ## Results
 
 `results/<date-time>[-label]/`:

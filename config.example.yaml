@@ -40,3 +40,5 @@ run:
   repeat: 1
   concurrency: 2
   stages: ["*"]
+  # tags: [smoke]          # только кейсы с этими тегами
+  # exclude_tags: [holdout] # подбор параметров без контрольного набора

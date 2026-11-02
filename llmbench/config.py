@@ -78,6 +78,7 @@ class BenchConfig:
     concurrency: int = 2
     stages: list[str] = field(default_factory=lambda: ["*"])
     tags: list[str] = field(default_factory=list)
+    exclude_tags: list[str] = field(default_factory=list)
 
     def select_profiles(self, names: list[str] | None) -> list[ProfileConfig]:
         if not names:
@@ -145,6 +146,7 @@ def load_config(path: str | Path) -> BenchConfig:
         concurrency=int(run.get("concurrency", 2)),
         stages=list(run.get("stages") or ["*"]),
         tags=list(run.get("tags") or []),
+        exclude_tags=list(run.get("exclude_tags") or []),
     )
     config.validate()
     return config

@@ -97,3 +97,220 @@ cases:
       - {path: mode, eq: restrictions}
       - {path: "buffer_rules[*].buffer_size", eq: [40]}
       - {path: "buffer_rules[*].origin", eq: [user]}
+
+  - id: flat_buffer_along_roads
+    input: {user_query: "Построй плоские буферы 30 м вдоль автомобильных дорог"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", eq: ["Автомобильная дорога"]}
+      - {path: "buffer_rules[*].buffer_type", eq: [flat]}
+      - {path: "buffer_rules[*].buffer_size", eq: [30]}
+
+  - id: housing_in_industry_zone
+    input: {user_query: "Какие жилые дома попадают в зону 500 м от промышленных объектов?"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "source_entities[*].name", eq: ["Промышленный объект"]}
+      - {path: "target_entities[*].name", eq: ["Жилой дом"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [500]}
+      - {path: restriction_rules, min_len: 1}
+
+  - id: kilometres_converted
+    tags: [holdout]
+    input: {user_query: "Построй буфер 1,5 км вокруг больниц"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", eq: ["Больница"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [1500]}
+
+  - id: two_sources_two_distances
+    input: {user_query: "Построй буферы 100 м от рек и 50 м от ручьёв"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", set_eq: ["Река", "Ручей"]}
+      - {path: "buffer_rules[source_name=Река].buffer_size", eq: 100}
+      - {path: "buffer_rules[source_name=Ручей].buffer_size", eq: 50}
+
+  - id: unknown_target_not_invented
+    tags: [clarification]
+    input: {user_query: "Какие магазины находятся ближе 100 м к школам?"}
+    expect:
+      - {path: mode, eq: needs_clarification}
+      - {path: "target_entities[*].name", not_contains: ["Магазин", "Нежилое здание"]}
+      - {path: clarification_question, "null": false}
+
+  - id: medical_category_expanded
+    input: {user_query: "Построй буферы 300 м вокруг медицинских учреждений"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", set_eq: ["Поликлиника", "Больница"]}
+      - {path: "buffer_rules[*].buffer_size", set_eq: [300]}
+
+  - id: proximity_without_radius
+    tags: [clarification, holdout]
+    input: {user_query: "Какие школы находятся рядом с дорогами?"}
+    expect:
+      - {path: mode, eq: needs_clarification}
+      - {path: clarification_question, "null": false}
+
+  - id: normgraph_sanitary_zone
+    tags: [normgraph]
+    input:
+      user_query: "Какие жилые дома попадают в санитарно-защитную зону промышленных объектов по СанПиН?"
+      normgraph_restrictions:
+        - id: "ng-industry-housing-300"
+          subject: "Промышленный объект"
+          object: "Жилой дом"
+          kind: "санитарно-защитная зона"
+          value: {operator: ">=", number: 300, unit: "м"}
+          extraction_text: "Для промышленных объектов III класса опасности размер санитарно-защитной зоны составляет 300 м."
+          provenance: {doc_id: "sanpin", name: "СанПиН 2.2.1/2.1.1.1200-03", numbering: "7.1.3"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "buffer_rules[*].restriction_id", eq: ["ng-industry-housing-300"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [300]}
+      - {path: "buffer_rules[*].origin", eq: [normgraph]}
+      - {path: "target_entities[*].name", eq: ["Жилой дом"]}
+
+  - id: normgraph_unrelated_rule_ignored
+    tags: [normgraph]
+    input:
+      user_query: "Построй буфер 100 м вокруг школ"
+      normgraph_restrictions:
+        - id: "ng-river-housing-50"
+          subject: "Река"
+          object: "Жилой дом"
+          kind: "водоохранная зона"
+          value: {operator: ">=", number: 50, unit: "м"}
+          extraction_text: "Ширина прибрежной защитной полосы составляет 50 м."
+          provenance: {doc_id: "vk", name: "Водный кодекс РФ", numbering: "65"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", eq: ["Школа"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [100]}
+      - {path: "buffer_rules[*].origin", eq: [user]}
+      - {path: "buffer_rules[*].restriction_id", not_contains: ["ng-river-housing-50"]}
+
+  - id: followup_new_distance
+    tags: [history]
+    input:
+      history:
+        - {role: user, content: "Построй буфер 100 м вокруг школ"}
+        - {role: assistant, content: "Построил буферные зоны 100 м вокруг школ."}
+      user_query: "Теперь 250 метров"
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", eq: ["Школа"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [250]}
+
+  - id: housing_near_lakes
+    tags: [holdout]
+    input: {user_query: "Какие жилые дома находятся в пределах 30 м от озёр?"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "source_entities[*].name", eq: ["Озеро"]}
+      - {path: "target_entities[*].name", eq: ["Жилой дом"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [30]}
+
+  - id: square_buffer_type
+    input: {user_query: "Построй квадратные буферы 40 м вокруг детских садов"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", eq: ["Детский сад"]}
+      - {path: "buffer_rules[*].buffer_type", eq: [square]}
+      - {path: "buffer_rules[*].buffer_size", eq: [40]}
+
+  - id: two_physical_targets
+    tags: [holdout]
+    input: {user_query: "Какие жилые дома и промышленные объекты пересекают 50-метровую зону от рек?"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "source_entities[*].name", eq: ["Река"]}
+      - {path: "target_entities[*].name", set_eq: ["Жилой дом", "Промышленный объект"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [50]}
+
+  - id: absent_source_no_parent_category
+    tags: [clarification]
+    input: {user_query: "Построй буфер 100 м вокруг торговых центров"}
+    expect:
+      - {path: mode, eq: needs_clarification}
+      - {path: "source_entities[*].name", not_contains: ["Промышленный объект", "Жилой дом"]}
+      - {path: clarification_question, "null": false}
+
+  - id: repeated_norm_stays_normgraph
+    tags: [normgraph]
+    input:
+      user_query: "Построй зоны 25 м от автомобильных дорог до жилых домов по СП 42.13330"
+      normgraph_restrictions:
+        - id: "ng-road-housing-25"
+          subject: "Автомобильная дорога"
+          object: "Жилой дом"
+          kind: "минимальное расстояние"
+          value: {operator: ">=", number: 25, unit: "м"}
+          extraction_text: "Расстояние от края проезжей части автомобильных дорог до жилых домов следует принимать не менее 25 м."
+          provenance: {doc_id: "sp42", name: "СП 42.13330.2016", version: "2016", numbering: "8.21"}
+    expect:
+      - {path: "buffer_rules[*].origin", eq: [normgraph]}
+      - {path: "buffer_rules[*].restriction_id", eq: ["ng-road-housing-25"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [25]}
+
+  - id: followup_adds_targets
+    tags: [history, holdout]
+    input:
+      history:
+        - {role: user, content: "Построй буфер 200 м вокруг промышленных объектов"}
+        - {role: assistant, content: "Построил буферные зоны 200 м вокруг промышленных объектов."}
+      user_query: "Какие жилые дома туда попадают?"
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "source_entities[*].name", eq: ["Промышленный объект"]}
+      - {path: "target_entities[*].name", eq: ["Жилой дом"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [200]}
+
+  - id: normgraph_named_document_among_conflicting
+    tags: [normgraph, holdout]
+    input:
+      user_query: "Проверь жилые дома по отступу от автомобильных дорог по СП 42.13330"
+      normgraph_restrictions:
+        - id: "ng-road-housing-25"
+          subject: "Автомобильная дорога"
+          object: "Жилой дом"
+          kind: "минимальное расстояние"
+          value: {operator: ">=", number: 25, unit: "м"}
+          extraction_text: "Расстояние от края проезжей части автомобильных дорог до жилых домов следует принимать не менее 25 м."
+          provenance: {doc_id: "sp42", name: "СП 42.13330.2016", version: "2016", numbering: "8.21"}
+        - id: "ng-road-housing-regional-50"
+          subject: "Автомобильная дорога"
+          object: "Жилой дом"
+          kind: "минимальное расстояние"
+          value: {operator: ">=", number: 50, unit: "м"}
+          extraction_text: "Расстояние от автомобильных дорог до жилой застройки — не менее 50 м."
+          provenance: {doc_id: "rngp", name: "Региональные нормативы градостроительного проектирования Ленинградской области", numbering: "4.1.3"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "buffer_rules[*].restriction_id", eq: ["ng-road-housing-25"]}
+      - {path: "buffer_rules[*].buffer_size", eq: [25]}
+
+  - id: user_distance_without_document
+    tags: [normgraph]
+    input:
+      user_query: "Какие жилые дома ближе 100 м к промышленным объектам?"
+      normgraph_restrictions:
+        - id: "ng-industry-housing-300"
+          subject: "Промышленный объект"
+          object: "Жилой дом"
+          kind: "санитарно-защитная зона"
+          value: {operator: ">=", number: 300, unit: "м"}
+          extraction_text: "Для промышленных объектов III класса опасности размер санитарно-защитной зоны составляет 300 м."
+          provenance: {doc_id: "sanpin", name: "СанПиН 2.2.1/2.1.1.1200-03", numbering: "7.1.3"}
+    expect:
+      - {path: mode, eq: restrictions}
+      - {path: "buffer_rules[*].buffer_size", eq: [100]}
+      - {path: "buffer_rules[*].origin", eq: [user]}
+
+  - id: two_service_sources
+    input: {user_query: "Покажи зоны 100 м вокруг школ и детских садов"}
+    expect:
+      - {path: mode, eq: buffers_only}
+      - {path: "source_entities[*].name", set_eq: ["Школа", "Детский сад"]}
+      - {path: "buffer_rules[*].buffer_size", set_eq: [100]}
