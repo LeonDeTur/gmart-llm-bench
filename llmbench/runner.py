@@ -9,8 +9,8 @@ from pathlib import Path
 
 import httpx
 
-from llmbench.checks import evaluate_check, score
-from llmbench.client import complete
+from llmbench.checks import CheckResult, evaluate_check, score
+from llmbench.client import Completion, complete
 from llmbench.config import BenchConfig
 from llmbench.parse import schema_errors, to_output
 
@@ -72,7 +72,9 @@ class Runner:
                             output=None,
                             error=None,
                             latency_s=0,
-                            llm_calls=1,
+                            llm_calls=0,
+                            attempts=[],
+                            request_params={},
                             input_tokens=None,
                             output_tokens=None,
                             retried=False,
@@ -84,6 +86,7 @@ class Runner:
                         if self.save_prompts:
                             record["request"] = case.request
                         if model is not None:
+                            completion = Completion("", "", None, None, None, False, 0)
                             try:
                                 completion = await asyncio.wait_for(
                                     complete(
@@ -91,6 +94,7 @@ class Runner:
                                         model,
                                         case.request,
                                         clients[model.endpoint],
+                                        progress=completion,
                                     ),
                                     timeout=self.case_timeout_s,
                                 )
@@ -102,8 +106,11 @@ class Runner:
                                     "output_tokens",
                                     "retried",
                                     "latency_s",
+                                    "attempts",
+                                    "request_params",
                                 ):
                                     record[key] = getattr(completion, key)
+                                record["llm_calls"] = completion.calls
                                 output, error = to_output(case.kind, completion.content)
                                 if error:
                                     raise ValueError(error)
@@ -115,6 +122,18 @@ class Runner:
                                     evaluate_check(output, check)
                                     for check in case.expect
                                 ]
+                                if case.kind == "auto" and isinstance(
+                                    case.request.get("format"), dict
+                                ):
+                                    checks.append(
+                                        CheckResult(
+                                            name="$ schema",
+                                            passed=not record["schema_errors"],
+                                            weight=1,
+                                            actual=record["schema_errors"],
+                                            expected=[],
+                                        )
+                                    )
                                 record.update(
                                     checks=[check.to_dict() for check in checks],
                                     score=score(checks),
@@ -125,6 +144,18 @@ class Runner:
                                     ),
                                 )
                             except Exception as exc:
+                                for key in (
+                                    "content",
+                                    "thinking",
+                                    "done_reason",
+                                    "input_tokens",
+                                    "output_tokens",
+                                    "retried",
+                                    "attempts",
+                                    "request_params",
+                                ):
+                                    record[key] = getattr(completion, key)
+                                record["llm_calls"] = completion.calls
                                 record.update(
                                     status="error",
                                     score=0,

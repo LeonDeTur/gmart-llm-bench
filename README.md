@@ -86,8 +86,9 @@ llmbench run --config config.yaml --tags holdout --label final            # fina
 | `report.md` | summary per profile, best profile per stage, stage × profile matrix (pass rate, score, latency, tokens, schema-invalid answers, retries), every failed check |
 | `review.md` | answers of manual stages side by side per profile, for a human to read |
 | `grades.csv` | template for manual grades 0–2; once filled in, `llmbench report <dir>` folds them into the report |
-| `results.jsonl` | one record per case run: raw answer, parsed JSON, checks, tokens |
-| `summary.json`, `meta.json` | summary and run parameters, including the dataset version |
+| `results.jsonl` | one record per case run: raw answer, parsed JSON, checks, tokens; `request_params` stores the final request body without `messages`, with the schema replaced by its hash and title |
+| `summary.json` | run summary |
+| `meta.json` | dataset version, benchmark commit and tracked changes in `llmbench`/`cases`/`data`, endpoints without `api_key` or URL userinfo/query/fragment, server versions (vLLM `/version`, Ollama `/api/version`), run parameters |
 
 `--save-prompts` also stores the request itself in `results.jsonl`.
 
@@ -99,9 +100,10 @@ The `results/` directory of this repository holds runs of qwen3.8-27b on vLLM;
 
 `llmbench list` shows the stages and their kind:
 
-- **auto** — the model answers with JSON that follows a schema; scored by the checks alone. An
-  answer that does not parse as JSON is a case error; JSON that violates the schema is counted
-  separately ("schema-invalid") and is still scored by the checks as is.
+- **auto** — the model answers with JSON that follows a schema; scored by the checks. An
+  answer that does not parse as JSON is a case error; JSON that violates the schema fails the
+  synthetic `$ schema` check, affecting both the score and pass/fail. The "schema-invalid"
+  column remains.
 - **manual** — free text (answers about norms, explanations, summaries, chat titles): formal
   checks (language, length, citations, prohibitions) plus a human grade in `review.md`.
 
@@ -109,7 +111,9 @@ What is measured is **the model itself**: the way gMART's code post-processes th
 (canonical names, clamping, repair passes, a repeated request after a validation error) is not
 part of the benchmark. The one thing the runner repeats after gMART is a single retry with a
 larger `max_tokens` when a structured answer from an OpenAI-compatible server is cut off or
-empty (gMART's adapter does the same); such runs show up in the "Retries" column.
+empty (gMART's adapter does the same); such runs show up in the "Retries" column. In the results,
+`llm_calls` is the actual number of HTTP calls; `attempts` records `done_reason`, input/output
+tokens and `max_tokens` for each attempt. Token totals are summed across attempts.
 
 ## Cases and checks
 

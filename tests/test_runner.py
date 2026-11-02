@@ -2,6 +2,7 @@ import asyncio
 import json
 
 import httpx
+import pytest
 
 from llmbench.config import (
     BenchConfig,
@@ -52,7 +53,11 @@ def install_transport(monkeypatch, handler):
 
 
 async def test_records_and_reports(tmp_path, monkeypatch):
-    responses = {"pass": '{"ok":true}', "fail": '{"ok":false}', "invalid": "bad"}
+    responses = {
+        "pass": '{"ok":true,"extra":1}',
+        "fail": '{"ok":false}',
+        "invalid": "bad",
+    }
 
     def handler(req):
         body = json.loads(req.content)
@@ -80,7 +85,7 @@ async def test_records_and_reports(tmp_path, monkeypatch):
     }
     assert by_case["pass"]["score"] == 1 and by_case["fail"]["score"] == 0
     assert by_case["invalid"]["checks"] == [] and by_case["invalid"]["score"] == 0
-    assert by_case["pass"]["schema_errors"]
+    assert not by_case["pass"]["schema_errors"]
     fields = {
         "profile",
         "stage",
@@ -109,6 +114,8 @@ async def test_records_and_reports(tmp_path, monkeypatch):
         "content",
         "thinking",
         "request",
+        "attempts",
+        "request_params",
     }
     assert all(fields <= r.keys() for r in records)
     assert all(r["llm_calls"] == 1 for r in records)
@@ -121,7 +128,7 @@ async def test_records_and_reports(tmp_path, monkeypatch):
     assert len(lines) == 3
     meta = {"dataset": {"commit": "1234567890", "exported_at": "today"}}
     summary = write_reports(tmp_path, meta)
-    assert summary["profiles"]["p"]["schema_invalid"] == 2
+    assert summary["profiles"]["p"]["schema_invalid"] == 1
     report = (tmp_path / "report.md").read_text(encoding="utf-8")
     assert (
         "12345678" in report and "Невалидных по схеме" in report and "Повторы" in report
@@ -247,7 +254,21 @@ def test_cli_exact_out_and_meta(tmp_path, monkeypatch):
         [],
     )
     monkeypatch.setattr(cli, "load_dataset", lambda root: dataset)
-    monkeypatch.setattr(cli, "load_config", lambda path: config())
+    cfg = config()
+    cfg.endpoints["e"] = EndpointConfig(
+        "e", base_url="http://u:p@test/v1", api_key="secret",
+        host="http://u:p@host:8002/v1?k=1#fragment",
+        extra_body={"custom": "unchanged"},
+    )
+    cfg.endpoints["unused"] = EndpointConfig("unused", api_key="unused-secret")
+    monkeypatch.setattr(cli, "load_config", lambda path: cfg)
+
+    def unavailable(url, **kwargs):
+        assert url == "http://u:p@test/version"
+        assert kwargs["timeout"] == 2
+        raise httpx.ConnectError("offline")
+
+    monkeypatch.setattr(cli.httpx, "get", unavailable)
 
     async def fake_run(self, cases, profiles, out_file):
         out_file.write_text("", encoding="utf-8")
@@ -261,6 +282,17 @@ def test_cli_exact_out_and_meta(tmp_path, monkeypatch):
     assert meta["dataset"] == {"commit": "123", "dirty": False, "exported_at": "today"}
     assert meta["profiles"] == ["only:m"]
     assert meta["profile_models"] == {"only:m": {"s": "m"}}
+    assert meta["servers"] == {"e": None}
+    assert "api_key" not in meta["endpoints"]["e"]
+    assert set(meta["endpoints"]) == {"e"}
+    assert "secret" not in json.dumps(meta)
+    assert meta["endpoints"]["e"]["base_url"] == "http://test/v1"
+    assert meta["endpoints"]["e"]["host"] == "http://host:8002/v1"
+    assert meta["endpoints"]["e"]["extra_body"] == {"custom": "unchanged"}
+    assert meta["run"]["argv"] == arguments
+    assert meta["run"]["concurrency"] == 2
+    assert meta["run"]["case_timeout"] == 900
+    assert set(meta["bench"]) == {"commit", "dirty"}
     assert (out / "results.jsonl").is_file()
     assert cli.main(arguments) == 1
 
@@ -287,3 +319,161 @@ def test_grades_are_folded_and_preserved(tmp_path):
     summary = write_reports(tmp_path, {})
     assert summary["cells"][0]["mean_grade"] == 2
     assert (tmp_path / "grades.csv").read_text(encoding="utf-8-sig") == grades
+
+
+@pytest.mark.parametrize(
+    "kind,content,status,expected_score",
+    [
+        ("auto", '{"ok":true}', "fail", 0.5),
+        ("auto", '{"ok":true,"extra":1}', "pass", 1),
+        ("manual", "Ответ", "pass", 1),
+    ],
+)
+async def test_schema_scoring(tmp_path, monkeypatch, kind, content, status, expected_score):
+    install_transport(monkeypatch, lambda req: httpx.Response(
+        200, json={"choices": [{"message": {"content": content}, "finish_reason": "stop"}]}
+    ))
+    cfg = config()
+    case = make_case("schema", kind=kind)
+    if kind == "manual":
+        case.expect = [{"path": "text", "eq": "Ответ"}]
+    records = await Runner(cfg).run([case], list(cfg.profiles.values()), tmp_path / "out.jsonl")
+    record = records[0]
+    assert record["status"] == status
+    assert record["score"] == expected_score
+    schema_checks = [c for c in record["checks"] if c["name"] == "$ schema"]
+    if kind == "auto":
+        assert len(schema_checks) == 1
+        assert schema_checks[0]["passed"] == (status == "pass")
+    else:
+        assert not schema_checks and record["needs_review"]
+
+
+@pytest.mark.parametrize("failure", [None, "http", "timeout"])
+async def test_retry_accounting(tmp_path, monkeypatch, failure):
+    calls = []
+
+    async def handler(req):
+        calls.append(json.loads(req.content))
+        if len(calls) == 2:
+            if failure == "http":
+                return httpx.Response(500, text="offline")
+            if failure == "timeout":
+                await asyncio.sleep(0.2)
+        first = len(calls) == 1
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": '{"ok":true,"extra":1}'},
+                         "finish_reason": "length" if first else "stop"}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+        })
+
+    install_transport(monkeypatch, handler)
+    cfg = config()
+    cfg.endpoints["e"] = EndpointConfig("e", api_key="secret")
+    case = make_case("retry")
+    case.request["format"]["title"] = "plan"
+    records = await Runner(cfg, case_timeout_s=0.05).run(
+        [case], list(cfg.profiles.values()), tmp_path / "results.jsonl"
+    )
+    record = records[0]
+    assert record["llm_calls"] == 2 and record["retried"]
+    assert len(record["attempts"]) == 2
+    assert record["input_tokens"] == (10 if failure else 20)
+    assert record["output_tokens"] == (5 if failure else 10)
+    assert record["status"] == ("error" if failure else "pass")
+    params = record["request_params"]
+    assert "messages" not in params and "secret" not in json.dumps(params)
+    ref = params["response_format"]["json_schema"]["schema"]
+    assert set(ref) == {"sha256", "title"} and ref["title"] == "plan"
+    assert len(ref["sha256"]) == 12 and params["max_tokens"] == 4096
+    saved = json.loads((tmp_path / "results.jsonl").read_text(encoding="utf-8"))
+    assert saved == record
+    cell = summarize(records)["cells"][0]
+    assert cell["mean_llm_calls"] == 2 and cell["retried"] == 1
+
+
+def test_cli_old_results(tmp_path):
+    from llmbench.__main__ import main
+
+    record = dict(profile="p", stage="s", case="old", kind="auto", status="pass",
+                  score=1, checks=[], llm_calls=1)
+    (tmp_path / "meta.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "results.jsonl").write_text(json.dumps(record) + "\n", encoding="utf-8")
+    assert main(["report", str(tmp_path)]) == 0
+    assert (tmp_path / "report.md").exists()
+    assert (tmp_path / "summary.json").exists()
+
+
+def test_report_provenance():
+    text = render_report(summarize([]), [], {
+        "bench": {"commit": "abcdef012345", "dirty": True},
+        "servers": {"vllm": {"version": "0.12"}, "ollama": {"version": "0.9"}, "offline": None},
+    })
+    assert "abcdef01 (есть незакоммиченные изменения)" in text
+    assert "vllm: 0.12" in text and "ollama: 0.9" in text
+
+
+def test_bench_git_unavailable(monkeypatch):
+    from llmbench import __main__ as cli
+
+    def unavailable(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(cli.subprocess, "run", unavailable)
+    assert cli._bench_version() == {"commit": None, "dirty": None}
+
+
+@pytest.mark.parametrize("tracked_status", ["", " M llmbench/client.py\n"])
+def test_bench_dirty_ignores_untracked(monkeypatch, tracked_status):
+    from llmbench import __main__ as cli
+
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command == ["git", "rev-parse", "HEAD"]:
+            output = "abcdef012345\n"
+        else:
+            assert command == [
+                "git", "status", "--porcelain", "--untracked-files=no",
+                "--", "llmbench", "cases", "data",
+            ]
+            output = tracked_status
+        return cli.subprocess.CompletedProcess(command, 0, stdout=output)
+
+    monkeypatch.setattr(cli.subprocess, "run", run)
+    assert cli._bench_version() == {
+        "commit": "abcdef012345", "dirty": bool(tracked_status),
+    }
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("value,expected", [
+    (None, None),
+    ("http://u:p@host:8002/v1?k=1", "http://host:8002/v1"),
+    ("https://u:p@host/v1?k=1#fragment", "https://host/v1"),
+    ("http://u:p@[::1]:8002/v1#fragment", "http://[::1]:8002/v1"),
+    ("http://host:8002/v1", "http://host:8002/v1"),
+])
+def test_clean_endpoint_url(value, expected):
+    from llmbench.__main__ import _clean_url
+
+    assert _clean_url(value) == expected
+
+
+def test_server_versions(monkeypatch):
+    from llmbench import __main__ as cli
+
+    urls = []
+
+    def get(url, **kwargs):
+        urls.append(url)
+        return httpx.Response(200, json={"version": "test"}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(cli.httpx, "get", get)
+    versions = cli._server_versions({
+        "v": EndpointConfig("v", base_url="http://v/v1/"),
+        "o": EndpointConfig("o", backend="ollama", host="http://o/"),
+    })
+    assert urls == ["http://v/version", "http://o/api/version"]
+    assert versions == {"v": {"version": "test"}, "o": {"version": "test"}}

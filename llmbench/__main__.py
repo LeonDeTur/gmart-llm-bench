@@ -5,11 +5,15 @@ import asyncio
 import json
 import logging
 import re
+import subprocess
 import sys
 from collections import Counter
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
+
+import httpx
 
 from llmbench.config import load_config
 from llmbench.dataset import load_dataset, select
@@ -18,6 +22,53 @@ from llmbench.runner import Runner
 
 ROOT = Path(__file__).resolve().parent.parent
 logger = logging.getLogger(__name__)
+
+
+def _bench_version():
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        status = subprocess.run(
+            [
+                "git", "status", "--porcelain", "--untracked-files=no",
+                "--", "llmbench", "cases", "data",
+            ], cwd=ROOT, check=True,
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        return {"commit": commit, "dirty": bool(status.strip())}
+    except (OSError, subprocess.SubprocessError):
+        return {"commit": None, "dirty": None}
+
+
+def _clean_url(value):
+    if value is None:
+        return None
+    url = urlsplit(value)
+    return url._replace(
+        netloc=url.netloc.rsplit("@", 1)[-1], query="", fragment=""
+    ).geturl()
+
+
+def _server_versions(endpoints):
+    versions = {}
+    for name, endpoint in endpoints.items():
+        versions[name] = None
+        if endpoint.backend == "openai":
+            base = (endpoint.base_url or "http://localhost:8000").rstrip("/")
+            if base.endswith("/v1"):
+                base = base[:-3]
+            url = base + "/version"
+        else:
+            url = (endpoint.host or "http://localhost:11434").rstrip("/") + "/api/version"
+        try:
+            response = httpx.get(url, timeout=2)
+            response.raise_for_status()
+            versions[name] = response.json()
+        except Exception:
+            pass
+    return versions
 
 
 def _csv(value):
@@ -93,7 +144,30 @@ def _run(args):
     out.mkdir(parents=True, exist_ok=True)
     if any((out / name).exists() for name in ("meta.json", "results.jsonl")):
         raise ValueError(f"Каталог уже содержит результаты: {out}")
+    used = {
+        config.models[name].endpoint
+        for profile in profiles for case in ready
+        if (name := profile.model_for(case.stage)) is not None
+    }
+    endpoints = {name: config.endpoints[name] for name in sorted(used)}
     meta = dict(
+        bench=_bench_version(),
+        endpoints={
+            name: {
+                key: _clean_url(value) if key in ("base_url", "host") else value
+                for key, value in asdict(endpoint).items() if key != "api_key"
+            }
+            for name, endpoint in endpoints.items()
+        },
+        servers=_server_versions(endpoints),
+        run=dict(
+            concurrency=config.concurrency, repeat=config.repeat,
+            case_timeout=args.case_timeout,
+            stages=_csv(args.stages) or config.stages,
+            tags=_csv(args.tags) or config.tags,
+            exclude_tags=_csv(args.exclude_tags) or config.exclude_tags,
+            label=args.label, argv=getattr(args, "argv", sys.argv[1:]),
+        ),
         started=started.isoformat(),
         config=str(args.config.resolve()),
         profiles=[p.name for p in profiles],
@@ -129,6 +203,7 @@ def main(argv=None):
     # httpx logs every request with the server address; progress lines are enough.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     args = _parser().parse_args(argv)
+    args.argv = list(argv) if argv is not None else sys.argv[1:]
     try:
         if args.command == "report":
             meta = json.loads(

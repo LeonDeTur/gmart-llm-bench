@@ -183,6 +183,18 @@ def render_report(
     summary: dict[str, Any], results: list[dict[str, Any]], meta: dict
 ) -> str:
     lines = [f"# Бенчмарк LLM-этапов gMART — {meta.get('started', '')}", ""]
+    bench = meta.get("bench") or {}
+    provenance = []
+    if bench.get("commit"):
+        commit = bench["commit"][:8]
+        if bench.get("dirty"):
+            commit += " (есть незакоммиченные изменения)"
+        provenance.append(f"Бенчмарк: {commit}")
+    for name, server in (meta.get("servers") or {}).items():
+        if isinstance(server, dict) and server.get("version"):
+            provenance.append(f"{name}: {server['version']}")
+    if provenance:
+        lines += [" · ".join(provenance), ""]
     lines += [
         f"Профили: {', '.join(meta.get('profiles', []))} · кейсов: {meta.get('cases', 0)} · "
         f"повторов: {meta.get('repeat', 1)} · датасет: gMART "
