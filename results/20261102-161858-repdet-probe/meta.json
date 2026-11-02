@@ -1,0 +1,38 @@
+{
+  "started": "2026-11-02T16:18:58.102032+03:00",
+  "config": "C:\\Users\\Leon\\AppData\\Local\\Temp\\claude\\C--Projects-IDU-IDUclub-ICII\\0f5bc54e-783f-44ae-a934-321aa328d183\\scratchpad\\rep-config.yaml",
+  "profiles": [
+    "base",
+    "repdet"
+  ],
+  "profile_models": {
+    "base": {
+      "restriction.plan": "base"
+    },
+    "repdet": {
+      "restriction.plan": "repdet"
+    }
+  },
+  "models": {
+    "base": {
+      "name": "base",
+      "endpoint": "base",
+      "model": "qwen3.8-27b",
+      "options": {}
+    },
+    "repdet": {
+      "name": "repdet",
+      "endpoint": "repdet",
+      "model": "qwen3.8-27b",
+      "options": {}
+    }
+  },
+  "cases": 28,
+  "repeat": 1,
+  "dataset": {
+    "commit": "68534ab3dbb2aaccf548610dbfb7e5b7fa14a709",
+    "branch": "HEAD",
+    "dirty": true,
+    "exported_at": "2026-11-02T14:56:33"
+  }
+}

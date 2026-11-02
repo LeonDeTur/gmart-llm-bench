@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "started": "2026-11-02T16:18:58.102032+03:00",
+    "config": "C:\\Users\\Leon\\AppData\\Local\\Temp\\claude\\C--Projects-IDU-IDUclub-ICII\\0f5bc54e-783f-44ae-a934-321aa328d183\\scratchpad\\rep-config.yaml",
+    "profiles": [
+      "base",
+      "repdet"
+    ],
+    "profile_models": {
+      "base": {
+        "restriction.plan": "base"
+      },
+      "repdet": {
+        "restriction.plan": "repdet"
+      }
+    },
+    "models": {
+      "base": {
+        "name": "base",
+        "endpoint": "base",
+        "model": "qwen3.8-27b",
+        "options": {}
+      },
+      "repdet": {
+        "name": "repdet",
+        "endpoint": "repdet",
+        "model": "qwen3.8-27b",
+        "options": {}
+      }
+    },
+    "cases": 28,
+    "repeat": 1,
+    "dataset": {
+      "commit": "68534ab3dbb2aaccf548610dbfb7e5b7fa14a709",
+      "branch": "HEAD",
+      "dirty": true,
+      "exported_at": "2026-11-02T14:56:33"
+    }
+  },
+  "cells": [
+    {
+      "profile": "base",
+      "stage": "restriction.plan",
+      "kind": "auto",
+      "model": "base",
+      "runs": 28,
+      "pass": 26,
+      "fail": 0,
+      "error": 2,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.9285714285714286,
+      "mean_score": 0.9285714285714286,
+      "mean_latency_s": 35.06140777499981,
+      "p95_latency_s": 188.5364426999986,
+      "mean_input_tokens": 1494.142857142857,
+      "mean_output_tokens": 710.2142857142857,
+      "mean_llm_calls": 1.0,
+      "stability": null,
+      "graded": 0,
+      "mean_grade": null
+    },
+    {
+      "profile": "repdet",
+      "stage": "restriction.plan",
+      "kind": "auto",
+      "model": "repdet",
+      "runs": 28,
+      "pass": 25,
+      "fail": 0,
+      "error": 3,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.8928571428571429,
+      "mean_score": 0.8928571428571429,
+      "mean_latency_s": 23.259031789285864,
+      "p95_latency_s": 34.022996700001386,
+      "mean_input_tokens": 1494.142857142857,
+      "mean_output_tokens": 427.5357142857143,
+      "mean_llm_calls": 1.0,
+      "stability": null,
+      "graded": 0,
+      "mean_grade": null
+    }
+  ],
+  "profiles": {
+    "base": {
+      "auto_runs": 28,
+      "auto_pass_rate": 0.9285714285714286,
+      "stage_macro_score": 0.9285714285714286,
+      "errors": 2,
+      "schema_invalid": 0,
+      "total_latency_s": 981.7194176999947
+    },
+    "repdet": {
+      "auto_runs": 28,
+      "auto_pass_rate": 0.8928571428571429,
+      "stage_macro_score": 0.8928571428571429,
+      "errors": 3,
+      "schema_invalid": 0,
+      "total_latency_s": 651.2528901000042
+    }
+  },
+  "best_per_stage": {
+    "restriction.plan": {
+      "profile": "base",
+      "model": "base",
+      "pass_rate": 0.9285714285714286,
+      "mean_score": 0.9285714285714286,
+      "mean_grade": null,
+      "mean_latency_s": 35.06140777499981
+    }
+  }
+}
