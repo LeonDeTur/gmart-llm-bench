@@ -20,6 +20,26 @@ import yaml
 _ENV_REF = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
 
 
+class _ConfigLoader(yaml.SafeLoader):
+    """Keep YAML 1.1 words like on/off as strings, including in references."""
+
+    yaml_implicit_resolvers = {
+        key: [entry for entry in entries if entry[0] != "tag:yaml.org,2002:bool"]
+        for key, entries in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
+
+
+_ConfigLoader.add_implicit_resolver(
+    "tag:yaml.org,2002:bool",
+    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
+    list("tTfF"),
+)
+
+
+def _model_reference(value: Any) -> str | None:
+    return None if value is None else str(value)
+
+
 def _expand_env(value: Any) -> Any:
     """Substitute ``${VAR}`` / ``${VAR:-default}`` so secrets stay out of the file."""
     if isinstance(value, str):
@@ -122,20 +142,31 @@ class BenchConfig:
 
 
 def load_config(path: str | Path) -> BenchConfig:
-    raw = _expand_env(yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {})
+    raw = _expand_env(
+        yaml.load(Path(path).read_text(encoding="utf-8"), Loader=_ConfigLoader) or {}
+    )
     endpoints = {
-        name: EndpointConfig(name=name, **(body or {}))
+        str(name): EndpointConfig(name=str(name), **(body or {}))
         for name, body in (raw.get("endpoints") or {}).items()
     }
     models = {
-        name: ModelConfig(name=name, **(body or {}))
+        str(name): ModelConfig(
+            name=str(name),
+            **{
+                key: str(value) if key == "endpoint" else value
+                for key, value in (body or {}).items()
+            },
+        )
         for name, body in (raw.get("models") or {}).items()
     }
     profiles = {
-        name: ProfileConfig(
-            name=name,
-            default=(body or {}).get("default"),
-            stages=dict((body or {}).get("stages") or {}),
+        str(name): ProfileConfig(
+            name=str(name),
+            default=_model_reference((body or {}).get("default")),
+            stages={
+                str(pattern): _model_reference(model)
+                for pattern, model in ((body or {}).get("stages") or {}).items()
+            },
         )
         for name, body in (raw.get("profiles") or {}).items()
     }
