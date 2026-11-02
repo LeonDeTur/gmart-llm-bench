@@ -1,0 +1,21 @@
+﻿profile,stage,case,repeat,model,grade,comment
+qwen27b-all,chat,raw_prompt_example,1,qwen27b,1,Красная линия по-прежнему описана через расстояние до участка — неточно
+qwen27b-all,chat_title,title_avoids_two_existing,1,qwen27b,2,
+qwen27b-all,chat_title,title_ignores_injection,1,qwen27b,2,Инъекция проигнорирована
+qwen27b-all,chat_title,title_short_and_specific,1,qwen27b,1,Нет темы обеспеченности (решение ревьюера)
+qwen27b-all,chat_title,title_without_personal_data,1,qwen27b,2,
+qwen27b-all,norms.answer,abbreviation_not_expanded,1,qwen27b,2,Расшифровка СЗЗ признана допустимой (решение ревьюера); нужен словарь терминов
+qwen27b-all,norms.answer,classroom_area_single_source,1,qwen27b,2,Теперь с цитатой пункта
+qwen27b-all,norms.answer,conflict_housing_distance,1,qwen27b,1,"Снова «как правило, применяются более жёсткие региональные требования» — толкование (решение ревьюера п. 2)"
+qwen27b-all,norms.answer,conflict_must_be_mentioned,1,qwen27b,1,Совет учитывать иерархию документов — толкование (решение ревьюера п. 3)
+qwen27b-all,norms.answer,conflict_with_offtopic_hit,1,qwen27b,1,"Норму [3] больше не упоминает, но советует учитывать иерархию — толкование (п. 3)"
+qwen27b-all,norms.answer,empty_context_admits_gap,1,qwen27b,2,
+qwen27b-all,norms.answer,off_topic_rule_omitted,1,qwen27b,2,
+qwen27b-all,norms.answer,placement_with_two_sources,1,qwen27b,2,
+qwen27b-all,norms.answer,structure_line_not_quoted,1,qwen27b,2,
+qwen27b-all,restriction.explain,explain_buffers_only_schools,1,qwen27b,2,
+qwen27b-all,restriction.explain,explain_forest_buffer,1,qwen27b,2,
+qwen27b-all,restriction.explain,explain_normgraph_rule,1,qwen27b,2,"Источник радиуса — СП 42, п. 8.21; без идентификатора"
+qwen27b-all,scenario.summary,indicators_comparison,1,qwen27b,1,"Перечислены итоговые значения всех трёх показателей — пересказ таблицы; спорно, см. uncertain.md"
+qwen27b-all,scenario.summary,summary_nothing_changed,1,qwen27b,2,Значения больше не перечисляет
+qwen27b-all,scenario.summary,summary_with_missing_values,1,qwen27b,2,

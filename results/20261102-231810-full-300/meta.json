@@ -1,0 +1,94 @@
+{
+  "bench": {
+    "commit": "1bced712683cb2817dd6630609f2bc687508e3e1",
+    "dirty": false
+  },
+  "endpoints": {
+    "vllm-dev": {
+      "name": "vllm-dev",
+      "backend": "openai",
+      "base_url": "http://vm2.idu:8002/v1",
+      "host": null,
+      "timeout": 300,
+      "think_mode": "chat_template",
+      "think_effort": "none",
+      "think_chat_template_kwarg": "enable_thinking",
+      "extra_body": {}
+    }
+  },
+  "servers": {
+    "vllm-dev": {
+      "version": "0.32.0"
+    }
+  },
+  "run": {
+    "concurrency": 4,
+    "repeat": 1,
+    "case_timeout": 900,
+    "stages": [
+      "*"
+    ],
+    "tags": [],
+    "exclude_tags": [],
+    "label": "full-300",
+    "argv": [
+      "run",
+      "--config",
+      "config.yaml",
+      "--concurrency",
+      "4",
+      "--label",
+      "full-300"
+    ]
+  },
+  "started": "2026-11-02T23:18:10.105999+03:00",
+  "config": "C:\\Projects\\IDU\\IDUclub\\ICII\\gmart-llm-bench\\config.yaml",
+  "profiles": [
+    "qwen27b-all"
+  ],
+  "profile_models": {
+    "qwen27b-all": {
+      "norms.review": "qwen27b",
+      "scenario.judge": "qwen27b",
+      "norms.answer": "qwen27b",
+      "restriction.explain": "qwen27b",
+      "scenario.summary": "qwen27b",
+      "chat_title": "qwen27b",
+      "chat": "qwen27b",
+      "scenario.request": "qwen27b",
+      "scenario.select": "qwen27b",
+      "scenario.candidates.select": "qwen27b",
+      "scenario.candidates.assess": "qwen27b",
+      "compliance.mapping": "qwen27b",
+      "compliance.mapping_reply": "qwen27b",
+      "compliance.scope": "qwen27b",
+      "compliance.scope_entities": "qwen27b",
+      "pzz.columns": "qwen27b",
+      "orchestrator.plan": "qwen27b",
+      "norms.planner": "qwen27b",
+      "dvd.planner": "qwen27b",
+      "pzz.inputs": "qwen27b",
+      "project.inputs": "qwen27b",
+      "provision.plan": "qwen27b",
+      "restriction.plan": "qwen27b"
+    }
+  },
+  "models": {
+    "qwen27b": {
+      "name": "qwen27b",
+      "endpoint": "vllm-dev",
+      "model": "qwen3.8-27b",
+      "options": {},
+      "think": null,
+      "think_effort": null
+    }
+  },
+  "cases": 300,
+  "repeat": 1,
+  "dataset": {
+    "commit": "3ccccfb8116529bc58ef23bfcfebf733a5757189",
+    "branch": "feat/llm-stage-exporter",
+    "dirty": false,
+    "exported_at": "2026-11-02T18:40:55"
+  }
+}
