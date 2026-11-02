@@ -1,0 +1,31 @@
+{
+  "started": "2026-11-02T13:43:04.317283+03:00",
+  "config": "C:\\Projects\\IDU\\IDUclub\\ICII\\gmart-llm-bench\\config.yaml",
+  "profiles": [
+    "qwen27b-all"
+  ],
+  "profile_models": {
+    "qwen27b-all": {
+      "scenario.judge": "qwen27b",
+      "pzz.columns": "qwen27b",
+      "pzz.inputs": "qwen27b",
+      "provision.plan": "qwen27b"
+    }
+  },
+  "models": {
+    "qwen27b": {
+      "name": "qwen27b",
+      "endpoint": "vllm-dev",
+      "model": "qwen3.8-27b",
+      "options": {}
+    }
+  },
+  "cases": 4,
+  "repeat": 5,
+  "dataset": {
+    "commit": "0433b2452e1156690b5e8b018e355c55622a979b",
+    "branch": "feat/llm-stage-benchmark",
+    "dirty": true,
+    "exported_at": "2026-11-02T02:17:42"
+  }
+}

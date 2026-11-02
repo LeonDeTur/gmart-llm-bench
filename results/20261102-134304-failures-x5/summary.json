@@ -1,0 +1,167 @@
+{
+  "meta": {
+    "started": "2026-11-02T13:43:04.317283+03:00",
+    "config": "C:\\Projects\\IDU\\IDUclub\\ICII\\gmart-llm-bench\\config.yaml",
+    "profiles": [
+      "qwen27b-all"
+    ],
+    "profile_models": {
+      "qwen27b-all": {
+        "scenario.judge": "qwen27b",
+        "pzz.columns": "qwen27b",
+        "pzz.inputs": "qwen27b",
+        "provision.plan": "qwen27b"
+      }
+    },
+    "models": {
+      "qwen27b": {
+        "name": "qwen27b",
+        "endpoint": "vllm-dev",
+        "model": "qwen3.8-27b",
+        "options": {}
+      }
+    },
+    "cases": 4,
+    "repeat": 5,
+    "dataset": {
+      "commit": "0433b2452e1156690b5e8b018e355c55622a979b",
+      "branch": "feat/llm-stage-benchmark",
+      "dirty": true,
+      "exported_at": "2026-11-02T02:17:42"
+    }
+  },
+  "cells": [
+    {
+      "profile": "qwen27b-all",
+      "stage": "provision.plan",
+      "kind": "auto",
+      "model": "qwen27b",
+      "runs": 5,
+      "pass": 0,
+      "fail": 5,
+      "error": 0,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.0,
+      "mean_score": 0.5,
+      "mean_latency_s": 2.9367102800002614,
+      "p95_latency_s": 3.3575824000035936,
+      "mean_input_tokens": 1092.0,
+      "mean_output_tokens": 42.0,
+      "mean_llm_calls": 1.0,
+      "stability": 1.0,
+      "graded": 0,
+      "mean_grade": null
+    },
+    {
+      "profile": "qwen27b-all",
+      "stage": "pzz.columns",
+      "kind": "auto",
+      "model": "qwen27b",
+      "runs": 5,
+      "pass": 0,
+      "fail": 5,
+      "error": 0,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.0,
+      "mean_score": 0.0,
+      "mean_latency_s": 1.2422900599995046,
+      "p95_latency_s": 1.7644384000013815,
+      "mean_input_tokens": 128.0,
+      "mean_output_tokens": 20.0,
+      "mean_llm_calls": 1.0,
+      "stability": 1.0,
+      "graded": 0,
+      "mean_grade": null
+    },
+    {
+      "profile": "qwen27b-all",
+      "stage": "pzz.inputs",
+      "kind": "auto",
+      "model": "qwen27b",
+      "runs": 5,
+      "pass": 0,
+      "fail": 5,
+      "error": 0,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.0,
+      "mean_score": 0.6666666666666666,
+      "mean_latency_s": 2.0762684000001173,
+      "p95_latency_s": 2.7562675999979547,
+      "mean_input_tokens": 118.0,
+      "mean_output_tokens": 35.0,
+      "mean_llm_calls": 1.0,
+      "stability": 1.0,
+      "graded": 0,
+      "mean_grade": null
+    },
+    {
+      "profile": "qwen27b-all",
+      "stage": "scenario.judge",
+      "kind": "auto",
+      "model": "qwen27b",
+      "runs": 5,
+      "pass": 0,
+      "fail": 5,
+      "error": 0,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.0,
+      "mean_score": 0.5,
+      "mean_latency_s": 3.8554778199999418,
+      "p95_latency_s": 4.413388400000258,
+      "mean_input_tokens": 414.0,
+      "mean_output_tokens": 73.0,
+      "mean_llm_calls": 1.0,
+      "stability": 1.0,
+      "graded": 0,
+      "mean_grade": null
+    }
+  ],
+  "profiles": {
+    "qwen27b-all": {
+      "auto_runs": 20,
+      "auto_pass_rate": 0.0,
+      "stage_macro_score": 0.41666666666666663,
+      "errors": 0,
+      "schema_invalid": 0,
+      "total_latency_s": 50.553732799999125
+    }
+  },
+  "best_per_stage": {
+    "provision.plan": {
+      "profile": "qwen27b-all",
+      "model": "qwen27b",
+      "pass_rate": 0.0,
+      "mean_score": 0.5,
+      "mean_grade": null,
+      "mean_latency_s": 2.9367102800002614
+    },
+    "pzz.columns": {
+      "profile": "qwen27b-all",
+      "model": "qwen27b",
+      "pass_rate": 0.0,
+      "mean_score": 0.0,
+      "mean_grade": null,
+      "mean_latency_s": 1.2422900599995046
+    },
+    "pzz.inputs": {
+      "profile": "qwen27b-all",
+      "model": "qwen27b",
+      "pass_rate": 0.0,
+      "mean_score": 0.6666666666666666,
+      "mean_grade": null,
+      "mean_latency_s": 2.0762684000001173
+    },
+    "scenario.judge": {
+      "profile": "qwen27b-all",
+      "model": "qwen27b",
+      "pass_rate": 0.0,
+      "mean_score": 0.5,
+      "mean_grade": null,
+      "mean_latency_s": 3.8554778199999418
+    }
+  }
+}
