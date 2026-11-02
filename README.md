@@ -14,88 +14,97 @@ configs:
 
 # gmart-llm-bench
 
-Бенчмарк LLM-этапов мультиагентной системы gMART: какая модель или комбинация моделей
-лучше справляется с каждым шагом агентов. Работает **без gMART и без его сервисов** — нужны
-только Python 3.11+ и доступ к модели (vLLM / любой OpenAI-совместимый сервер или Ollama).
+**English** · [Русский](README.ru.md)
 
-Каждый кейс — это ровно один запрос к модели в том виде, в каком его отправляет gMART
-(системный промпт, данные, JSON-схема ответа, параметры), плюс детерминированные проверки
-ответа. Запрос → ответ → проверки, без кода агентов между ними.
+A benchmark of the LLM stages of gMART, a multi-agent system for urban planning: it shows which
+model, or which combination of models, handles each step of the agents best. It runs **without
+gMART or any of its services**. All you need is Python 3.11+ and access to a model (vLLM or any
+other OpenAI-compatible server, or Ollama).
 
-## Быстрый старт
+Each case is exactly one request to the model, in the form gMART sends it (system prompt, data,
+JSON schema of the answer, parameters), plus deterministic checks of the answer. Request →
+answer → checks, with no agent code in between.
+
+The prompts, inputs and expected answers are in Russian, the language the agents work in.
+
+## Quick start
 
 ```bash
 git clone <url> gmart-llm-bench && cd gmart-llm-bench
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e .
-cp config.example.yaml config.yaml                 # адреса моделей; файл в .gitignore
-llmbench list                                      # этапы, кейсы, состояние запросов
-llmbench run --config config.yaml --tags smoke     # быстрый прогон
-llmbench run --config config.yaml                  # все кейсы
+cp config.example.yaml config.yaml                 # model addresses; the file is in .gitignore
+llmbench list                                      # stages, cases, state of the requests
+llmbench run --config config.yaml --tags smoke     # quick run
+llmbench run --config config.yaml                  # all cases
 ```
 
-Адреса можно не писать в файл: `config.example.yaml` берёт их из окружения
-(`BENCH_VLLM_URL`, `BENCH_VLLM_API_KEY`, `BENCH_GPTOSS_URL`, `BENCH_OLLAMA_URL`).
-Вместо `llmbench` можно писать `python -m llmbench`.
+The addresses do not have to be written into the file: `config.example.yaml` reads them from the
+environment (`BENCH_VLLM_URL`, `BENCH_VLLM_API_KEY`, `BENCH_GPTOSS_URL`, `BENCH_OLLAMA_URL`).
+`python -m llmbench` works in place of `llmbench`.
 
-## Сравнение моделей
+## Comparing models
 
-`config.yaml` описывает три уровня:
+`config.yaml` describes three levels:
 
-- **endpoints** — серверы: `backend: openai` (vLLM и др.) или `ollama`, адрес, ключ, таймаут
-  и то, как серверу передаётся отключение размышлений (`think_mode`: `reasoning_effort`,
-  `chat_template` — нужно qwen3 на vLLM, `off`);
-- **models** — именованные модели на серверах; `options` добавляются к каждому запросу
-  (например, `num_ctx` для Ollama или `temperature`);
-- **profiles** — какая модель на каком этапе: `default` для всех, `stages` — переопределения
-  по id или glob (`"scenario.*": qwen14b`). Сравниваются профили между собой.
+- **endpoints** — servers: `backend: openai` (vLLM and others) or `ollama`, address, key, timeout,
+  and how the server is told to turn reasoning off (`think_mode`: `reasoning_effort`,
+  `chat_template` — needed for qwen3 on vLLM, `off`);
+- **models** — named models on those servers; their `options` are added to every request
+  (for example `num_ctx` for Ollama, or `temperature`);
+- **profiles** — which model runs which stage: `default` for all stages, `stages` for overrides
+  by id or glob (`"scenario.*": qwen14b`). Profiles are compared with each other.
 
 ```bash
-llmbench run --config config.yaml --models qwen27b,gptoss20b       # по профилю на модель
+llmbench run --config config.yaml --models qwen27b,gptoss20b       # one profile per model
 llmbench run --config config.yaml --profiles mixed --stages "orchestrator.*,provision.*"
-llmbench run --config config.yaml --repeat 3 --label stability     # оценка стабильности
+llmbench run --config config.yaml --repeat 3 --label stability     # measure stability
 ```
 
-Профили прогоняются по очереди (общий сервер под двумя моделями сразу исказил бы
-латентность), кейсы внутри профиля — параллельно (`run.concurrency`).
+Profiles run one after another (two models on one shared server at once would distort latency);
+cases within a profile run in parallel (`run.concurrency`).
 
-## Результаты
+## Results
 
-`results/<дата-время>[-label]/`:
+`results/<date-time>[-label]/`:
 
-| Файл | Что в нём |
+| File | Contents |
 |---|---|
-| `report.md` | итог по профилям, лучший профиль по этапам, матрица этап × профиль (pass rate, балл, латентность, токены, невалидные по схеме ответы, повторы), все проваленные проверки |
-| `review.md` | ответы ручных этапов рядом по профилям — для проверки глазами |
-| `grades.csv` | шаблон ручных оценок 0–2; после заполнения `llmbench report <каталог>` включает их в отчёт |
-| `results.jsonl` | запись на каждый прогон кейса: сырой ответ, разобранный JSON, проверки, токены |
-| `summary.json`, `meta.json` | сводка и параметры прогона, включая версию датасета |
+| `report.md` | summary per profile, best profile per stage, stage × profile matrix (pass rate, score, latency, tokens, schema-invalid answers, retries), every failed check |
+| `review.md` | answers of manual stages side by side per profile, for a human to read |
+| `grades.csv` | template for manual grades 0–2; once filled in, `llmbench report <dir>` folds them into the report |
+| `results.jsonl` | one record per case run: raw answer, parsed JSON, checks, tokens |
+| `summary.json`, `meta.json` | summary and run parameters, including the dataset version |
 
-`--save-prompts` добавляет в `results.jsonl` сам запрос.
+`--save-prompts` also stores the request itself in `results.jsonl`.
 
-## Этапы
+The `results/` directory of this repository holds runs of qwen3.8-27b on vLLM;
+`results/legacy/` holds earlier runs made by the previous, gMART-bound version of the runner
+(a different record format).
 
-`llmbench list` выводит этапы и их тип:
+## Stages
 
-- **auto** — модель отвечает JSON по схеме; оценка только по проверкам. Ответ, который не
-  разбирается как JSON, — ошибка кейса; JSON, нарушающий схему, считается отдельно
-  («невалидных по схеме») и оценивается проверками как есть.
-- **manual** — свободный текст (ответы по нормам, объяснения, сводки, названия чатов):
-  формальные проверки (язык, длина, ссылки, запреты) плюс ручная оценка в `review.md`.
+`llmbench list` shows the stages and their kind:
 
-Оценивается **сама модель**: обработка ответа кодом gMART (канонизация названий, clamp,
-repair-проходы, повторный запрос при ошибке валидации) в бенчмарк не входит. Единственное,
-что раннер повторяет за gMART, — один повторный запрос с бо́льшим `max_tokens`, если
-структурированный ответ на OpenAI-совместимом сервере оборвался или пуст (так делает
-адаптер gMART); такие прогоны видны в колонке «Повторы».
+- **auto** — the model answers with JSON that follows a schema; scored by the checks alone. An
+  answer that does not parse as JSON is a case error; JSON that violates the schema is counted
+  separately ("schema-invalid") and is still scored by the checks as is.
+- **manual** — free text (answers about norms, explanations, summaries, chat titles): formal
+  checks (language, length, citations, prohibitions) plus a human grade in `review.md`.
 
-## Кейсы и проверки
+What is measured is **the model itself**: the way gMART's code post-processes the answer
+(canonical names, clamping, repair passes, a repeated request after a validation error) is not
+part of the benchmark. The one thing the runner repeats after gMART is a single retry with a
+larger `max_tokens` when a structured answer from an OpenAI-compatible server is cut off or
+empty (gMART's adapter does the same); such runs show up in the "Retries" column.
 
-`cases/*.yaml` — по файлу на группу этапов:
+## Cases and checks
+
+`cases/*.yaml` — one file per group of stages:
 
 ```yaml
 stage: provision.plan
-defaults: {services_catalog: [Школа, Поликлиника]}   # подмешивается во input каждого кейса
+defaults: {services_catalog: [Школа, Поликлиника]}   # merged into every case's input
 cases:
   - id: single_service_provision
     tags: [smoke]
@@ -103,40 +112,41 @@ cases:
     expect:
       - {path: mode, eq: provision}
       - {path: service_name, eq: Школа}
-    review: "что проверить глазами (для manual-этапов)"
+    review: "what to look at by eye (for manual stages)"
 ```
 
-Проверка — путь в ответе модели и один оператор: `eq`, `ne`, `in`, `not_in`, `set_eq`,
-`contains`, `not_contains`, `contains_any`, `subset`, `len`, `min_len`, `max_len`, `null`,
-`regex`, `not_regex`, `approx` (+`tol`), `gte`, `lte`. Необязательные `weight` (вес в балле
-кейса) и `name` (подпись в отчёте). Строки сравниваются без учёта регистра, `ё`/`е` и лишних
-пробелов.
+A check is a path into the model's answer and one operator: `eq`, `ne`, `in`, `not_in`,
+`set_eq`, `contains`, `not_contains`, `contains_any`, `subset`, `len`, `min_len`, `max_len`,
+`null`, `regex`, `not_regex`, `approx` (+`tol`), `gte`, `lte`. Optional `weight` (its weight in
+the case score) and `name` (its label in the report). Strings are compared ignoring case,
+`ё`/`е` and extra whitespace.
 
-Пути: `steps.0.agent` — элемент списка по индексу, `steps[*].agent` — поле у всех элементов,
-`items[id=1].confidence` — элемент списка, у которого поле `id` равно `1`
+Paths: `steps.0.agent` is a list element by index, `steps[*].agent` is a field of every element,
+`items[id=1].confidence` is the list element whose `id` field equals `1`
 (`selections[topic=жилой дом].entities`).
 
-**Проверки (`expect`, `review`, `tags`) можно править свободно.** `input` — это то, из чего
-gMART собрал запрос, поэтому его правка или новый кейс требуют повторного экспорта
-(см. ниже); до этого `llmbench list` показывает кейс как `stale`/`missing`, а `run` его
-пропускает.
+**Checks (`expect`, `review`, `tags`) can be edited freely.** `input` is what gMART built the
+request from, so changing it or adding a case requires a new export (see below); until then
+`llmbench list` shows the case as `stale`/`missing` and `run` skips it.
 
-## Датасет
+## Dataset
 
-- `data/requests.jsonl` — замороженные запросы: `stage`, `case`, `input_sha` (хэш входа кейса,
-  из которого собран запрос) и `request` (`messages`, `format` — JSON-схема ответа,
-  `options`, `think`, прочие параметры вызова).
-- `data/manifest.json` — коммит gMART, из которого выгружен датасет, дата, типы этапов.
+- `data/requests.jsonl` — the frozen requests: `stage`, `case`, `input_sha` (hash of the case
+  input the request was built from) and `request` (`messages`, `format` — the JSON schema of the
+  answer, `options`, `think`, other call parameters).
+- `data/manifest.json` — the gMART commit the dataset was exported from, the date, the kinds of
+  the stages.
 
-Запросы выгружает экспортёр в gMART (`benchmarks/` в репозитории gMART), когда меняются
-промпты агентов или входы кейсов:
+The requests are exported by the exporter in gMART (`benchmarks/` in the
+[gMART repository](https://github.com/IDUclub/gMART)) whenever the agents' prompts or the case
+inputs change:
 
 ```bash
-# в gMART, gmart-llm-bench склонирован рядом
+# in gMART, with gmart-llm-bench cloned next to it
 uv run python -m benchmarks export --bench ../gmart-llm-bench
 ```
 
-## Разработка
+## Development
 
 ```bash
 pip install -e ".[test]"
