@@ -1,9 +1,9 @@
 {
-  "exported_at": "2026-11-02T14:00:59",
+  "exported_at": "2026-11-02T14:56:33",
   "gmart": {
     "commit": "68534ab3dbb2aaccf548610dbfb7e5b7fa14a709",
-    "branch": "feat/llm-stage-benchmark",
-    "dirty": false
+    "branch": "HEAD",
+    "dirty": true
   },
   "context_window": 32768,
   "requests": 300,

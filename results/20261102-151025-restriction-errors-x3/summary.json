@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "started": "2026-11-02T15:10:25.630286+03:00",
+    "config": "C:\\Projects\\IDU\\IDUclub\\ICII\\gmart-llm-bench\\config.yaml",
+    "profiles": [
+      "qwen27b-all"
+    ],
+    "profile_models": {
+      "qwen27b-all": {
+        "restriction.plan": "qwen27b"
+      }
+    },
+    "models": {
+      "qwen27b": {
+        "name": "qwen27b",
+        "endpoint": "vllm-dev",
+        "model": "qwen3.8-27b",
+        "options": {}
+      }
+    },
+    "cases": 2,
+    "repeat": 3,
+    "dataset": {
+      "commit": "68534ab3dbb2aaccf548610dbfb7e5b7fa14a709",
+      "branch": "HEAD",
+      "dirty": true,
+      "exported_at": "2026-11-02T14:56:33"
+    }
+  },
+  "cells": [
+    {
+      "profile": "qwen27b-all",
+      "stage": "restriction.plan",
+      "kind": "auto",
+      "model": "qwen27b",
+      "runs": 6,
+      "pass": 2,
+      "fail": 0,
+      "error": 4,
+      "schema_invalid": 0,
+      "retried": 0,
+      "pass_rate": 0.3333333333333333,
+      "mean_score": 0.3333333333333333,
+      "mean_latency_s": 174.31535709999966,
+      "p95_latency_s": 244.6938341999994,
+      "mean_input_tokens": 1673.5,
+      "mean_output_tokens": 2997.3333333333335,
+      "mean_llm_calls": 1.0,
+      "stability": 0.0,
+      "graded": 0,
+      "mean_grade": null
+    }
+  ],
+  "profiles": {
+    "qwen27b-all": {
+      "auto_runs": 6,
+      "auto_pass_rate": 0.3333333333333333,
+      "stage_macro_score": 0.3333333333333333,
+      "errors": 4,
+      "schema_invalid": 0,
+      "total_latency_s": 1045.892142599998
+    }
+  },
+  "best_per_stage": {
+    "restriction.plan": {
+      "profile": "qwen27b-all",
+      "model": "qwen27b",
+      "pass_rate": 0.3333333333333333,
+      "mean_score": 0.3333333333333333,
+      "mean_grade": null,
+      "mean_latency_s": 174.31535709999966
+    }
+  }
+}
