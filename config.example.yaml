@@ -20,9 +20,26 @@ models:
   qwen27b:
     endpoint: vllm-dev
     model: qwen3.8-27b
+  # Та же модель с включённым reasoning: think модели заменяет think запроса.
+  qwen27b-think:
+    endpoint: vllm-dev
+    model: qwen3.8-27b
+    think: true
+  # Сэмплинг профиля: в OpenAI-совместимый сервер уходят temperature, top_p,
+  # top_k, min_p, repetition_penalty, presence_penalty, frequency_penalty, seed.
+  qwen27b-sampling:
+    endpoint: vllm-dev
+    model: qwen3.8-27b
+    options: {top_k: 20, min_p: 0.0, repetition_penalty: 1.05}
   gptoss20b:
     endpoint: vllm-gptoss
     model: gpt-oss-20b
+  # think_effort модели заменяет think_effort эндпоинта.
+  gptoss20b-high:
+    endpoint: vllm-gptoss
+    model: gpt-oss-20b
+    think: true
+    think_effort: high
   qwen14b:
     endpoint: ollama-local
     model: qwen3:14b

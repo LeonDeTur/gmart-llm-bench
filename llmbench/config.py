@@ -52,6 +52,8 @@ class ModelConfig:
     model: str
     # Merged into every call's ``options`` (e.g. num_ctx for Ollama).
     options: dict[str, Any] = field(default_factory=dict)
+    think: bool | None = None
+    think_effort: str | None = None
 
 
 @dataclass(frozen=True)

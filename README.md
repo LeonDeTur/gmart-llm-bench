@@ -45,6 +45,15 @@ environment (`BENCH_VLLM_URL`, `BENCH_VLLM_API_KEY`, `BENCH_GPTOSS_URL`, `BENCH_
 
 ## Comparing models
 
+Model keys `think` and `think_effort` override the frozen request's thinking flag and the
+endpoint's effort; omitted or `null` keys keep the previous behavior. With `think: true`,
+`chat_template` sends `chat_template_kwargs.enable_thinking: true`, while `reasoning_effort`
+sends the model's effort when set. Answer content remains separate from reasoning. Model
+`options` override request options: OpenAI-compatible servers receive `temperature`,
+`num_predict` (as `max_tokens`), `top_p`, `top_k`, `min_p`, `repetition_penalty`,
+`presence_penalty`, `frequency_penalty` and `seed`. Unknown options warn once per key;
+`num_ctx` stays local to retry limits. Ollama options pass through unchanged.
+
 `config.yaml` describes three levels:
 
 - **endpoints** — servers: `backend: openai` (vLLM and others) or `ollama`, address, key, timeout,
@@ -109,9 +118,11 @@ The `results/` directory of this repository holds runs of qwen3.8-27b on vLLM;
 
 What is measured is **the model itself**: the way gMART's code post-processes the answer
 (canonical names, clamping, repair passes, a repeated request after a validation error) is not
-part of the benchmark. The one thing the runner repeats after gMART is a single retry with a
-larger `max_tokens` when a structured answer from an OpenAI-compatible server is cut off or
-empty (gMART's adapter does the same); such runs show up in the "Retries" column. In the results,
+part of the benchmark. The runner retries a structured answer from an OpenAI-compatible
+server once when it is empty or ends with `length` or `repetition`. Only `repetition` keeps
+the same `max_tokens` and skips the `num_ctx` check; other retries require budget growth
+within `num_ctx`. Such runs show up
+in the "Retries" column. In the results,
 `llm_calls` is the actual number of HTTP calls; `attempts` records `done_reason`, input/output
 tokens and `max_tokens` for each attempt. Token totals are summed across attempts.
 

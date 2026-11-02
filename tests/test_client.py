@@ -20,7 +20,8 @@ def answer(content='{"ok":true}', reason="stop"):
     }
 
 
-async def call(endpoint, request, model_id="model", responses=None, model_options=None):
+async def call(endpoint, request, model_id="model", responses=None, model_options=None,
+               **model_kwargs):
     calls = []
     responses = list(responses or [answer()])
 
@@ -31,7 +32,7 @@ async def call(endpoint, request, model_id="model", responses=None, model_option
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         result = await complete(
             endpoint,
-            ModelConfig("m", endpoint.name, model_id, model_options or {}),
+            ModelConfig("m", endpoint.name, model_id, model_options or {}, **model_kwargs),
             request,
             http,
         )
@@ -120,8 +121,10 @@ async def test_schema_and_model_options():
     assert "num_ctx" not in body and "unused" not in body and body["extra"] == 1
 
 
-@pytest.mark.parametrize("content,reason", [("{}", "length"), (" ", "stop")])
-async def test_structured_retry(content, reason):
+@pytest.mark.parametrize("content,reason,budget", [
+    ("{}", "length", 4096), (" ", "stop", 4096), ("{}", "repetition", 1024),
+])
+async def test_structured_retry(content, reason, budget):
     result, calls = await call(
         EndpointConfig("e"),
         request(format="json"),
@@ -129,20 +132,103 @@ async def test_structured_retry(content, reason):
     )
     assert len(calls) == 2 and result.retried
     assert calls[0][1]["max_tokens"] == 1024
-    assert calls[1][1]["max_tokens"] == 4096
+    assert calls[1][1]["max_tokens"] == budget
     assert result.content == '{"ok":true}'
     assert result.calls == 2 and len(result.attempts) == 2
     assert result.input_tokens == 20 and result.output_tokens == 10
-    assert [a["max_tokens"] for a in result.attempts] == [1024, 4096]
+    assert [a["max_tokens"] for a in result.attempts] == [1024, budget]
     assert result.done_reason == "stop"
-    assert result.request_params["max_tokens"] == 4096
+    assert result.request_params["max_tokens"] == budget
 
 
-async def test_retry_context_limit():
+async def test_sampling_options_and_warning(caplog, monkeypatch):
+    monkeypatch.setattr("llmbench.client._warned_options", set())
+    options = {
+        "top_k": 20, "min_p": 0.0, "repetition_penalty": 1.05,
+        "presence_penalty": 0.2, "frequency_penalty": 0.3, "seed": 0,
+    }
+    for _ in range(2):
+        _, calls = await call(
+            EndpointConfig("e"),
+            request(options={**request()["options"], "top_k": 99, "unknown": 1}),
+            model_options=options,
+        )
+        body = calls[0][1]
+        assert {key: body[key] for key in options} == options
+        assert "unknown" not in body and "num_ctx" not in body
+    assert [record.getMessage() for record in caplog.records] == [
+        "Ignoring unsupported OpenAI option: unknown"
+    ]
+
+
+@pytest.mark.parametrize("think,request_think,expected", [
+    (True, False, True), (False, True, False),
+    (None, False, False), (None, True, True),
+])
+async def test_model_think(think, request_think, expected):
+    original = request(think=request_think)
+    before = copy.deepcopy(original)
+    result, calls = await call(
+        EndpointConfig("e", think_mode="chat_template"), original, think=think,
+    )
+    assert calls[0][1]["chat_template_kwargs"]["enable_thinking"] is expected
+    assert result.content == '{"ok":true}' and result.thinking == "thought"
+    assert original == before
+
+
+async def test_model_think_overrides_template_kwargs():
+    _, calls = await call(
+        EndpointConfig("e", think_mode="chat_template"),
+        request(kwargs={"chat_template_kwargs": {"enable_thinking": False, "other": 1}}),
+        think=True,
+    )
+    assert calls[0][1]["chat_template_kwargs"] == {"enable_thinking": True, "other": 1}
+
+
+@pytest.mark.parametrize("effort", ["low", "medium", "high"])
+@pytest.mark.parametrize("think", [None, True])
+async def test_model_think_effort(effort, think):
+    _, calls = await call(
+        EndpointConfig("e", think_mode="reasoning_effort", think_effort="low"),
+        request(think=True, kwargs={"reasoning_effort": "medium"}),
+        model_id="gpt-oss-20b", think=think, think_effort=effort,
+    )
+    assert calls[0][1]["reasoning_effort"] == effort
+
+
+async def test_model_think_false_gptoss_normalization():
+    _, calls = await call(
+        EndpointConfig("e"), request(think=True), model_id="gpt-oss-20b",
+        think=False, think_effort="none",
+    )
+    assert calls[0][1]["reasoning_effort"] == "low"
+
+
+@pytest.mark.parametrize("content,reason", [("{}", "repetition"), (" ", "repetition")])
+async def test_same_budget_retry_ignores_context_limit(content, reason):
+    result, calls = await call(
+        EndpointConfig("e"),
+        request(format={"type": "object"}, options={"num_ctx": 1, "num_predict": 8192}),
+        responses=[answer(content, reason), answer(content, reason)],
+    )
+    assert len(calls) == result.calls == 2
+    assert [body["max_tokens"] for _, body in calls] == [8192, 8192]
+    assert [attempt["done_reason"] for attempt in result.attempts] == [reason, reason]
+
+
+async def test_unstructured_repetition_does_not_retry():
+    result, calls = await call(
+        EndpointConfig("e"), request(), responses=[answer("text", "repetition")],
+    )
+    assert len(calls) == result.calls == 1 and not result.retried
+
+
+@pytest.mark.parametrize("reason", ["length", "stop"])
+async def test_retry_context_limit(reason):
     result, calls = await call(
         EndpointConfig("e"),
         request(format="json", options={"num_ctx": 500, "num_predict": 1024}),
-        responses=[answer("", "length")],
+        responses=[answer("", reason)],
     )
     assert len(calls) == 1 and not result.retried
 

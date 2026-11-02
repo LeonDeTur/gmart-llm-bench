@@ -3,12 +3,16 @@
 import copy
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 
 import httpx
 
 from llmbench.config import EndpointConfig, ModelConfig
+
+_logger = logging.getLogger(__name__)
+_warned_options: set[str] = set()
 
 
 class LlmError(RuntimeError):
@@ -66,6 +70,11 @@ async def complete(
     messages = copy.deepcopy(request["messages"])
     kwargs = copy.deepcopy(request.get("kwargs") or {})
     think, fmt = request.get("think"), request.get("format")
+    if model.think is not None:
+        think = model.think
+    think_effort = (
+        model.think_effort if model.think_effort is not None else endpoint.think_effort
+    )
 
     async def post(url, body, headers=None):
         progress.request_params = request_params(body)
@@ -119,13 +128,25 @@ async def complete(
         url = base + "/chat/completions"
         headers = {"Authorization": f"Bearer {endpoint.api_key or 'not-needed'}"}
         body = {"model": model.model, "messages": messages, "stream": False}
-        for source, target in (
+        option_names = (
             ("temperature", "temperature"),
             ("num_predict", "max_tokens"),
             ("top_p", "top_p"),
-        ):
+            ("top_k", "top_k"),
+            ("min_p", "min_p"),
+            ("repetition_penalty", "repetition_penalty"),
+            ("presence_penalty", "presence_penalty"),
+            ("frequency_penalty", "frequency_penalty"),
+            ("seed", "seed"),
+        )
+        for source, target in option_names:
             if source in options:
                 body[target] = options[source]
+        known_options = {source for source, _ in option_names} | {"num_ctx"}
+        for key in options:
+            if key not in known_options and key not in _warned_options:
+                _warned_options.add(key)
+                _logger.warning("Ignoring unsupported OpenAI option: %s", key)
         body.update({k: v for k, v in kwargs.items() if v is not None})
         if (
             think is False
@@ -133,19 +154,23 @@ async def complete(
             and endpoint.think_mode != "chat_template"
         ):
             effort = (
-                endpoint.think_effort
-                if endpoint.think_effort in {"low", "medium", "high"}
+                think_effort
+                if think_effort in {"low", "medium", "high"}
                 else "low"
             )
             if body.get("reasoning_effort") in (None, "none", "minimal"):
                 body["reasoning_effort"] = effort
         elif think is not None:
             if endpoint.think_mode == "reasoning_effort" and think is False:
-                body.setdefault("reasoning_effort", endpoint.think_effort)
+                body.setdefault("reasoning_effort", think_effort)
+            elif endpoint.think_mode == "reasoning_effort" and model.think_effort is not None:
+                body["reasoning_effort"] = think_effort
             elif endpoint.think_mode == "chat_template":
-                body.setdefault("chat_template_kwargs", {}).setdefault(
-                    endpoint.think_chat_template_kwarg, think
-                )
+                template_kwargs = body.setdefault("chat_template_kwargs", {})
+                if model.think is not None:
+                    template_kwargs[endpoint.think_chat_template_kwarg] = think
+                else:
+                    template_kwargs.setdefault(endpoint.think_chat_template_kwarg, think)
         if fmt == "json":
             body["response_format"] = {"type": "json_object"}
         elif isinstance(fmt, dict):
@@ -163,19 +188,21 @@ async def complete(
         choice = data["choices"][0]
         content = choice["message"].get("content") or ""
         if "response_format" in body and (
-            choice.get("finish_reason") == "length" or not content.strip()
+            choice.get("finish_reason") in {"length", "repetition"} or not content.strip()
         ):
-            budget = body.get("max_tokens") or 2048
-            retry_budget = max(budget, min(8192, max(4096, budget * 2)))
-            if "num_ctx" in options:
-                input_cost = sum(
-                    len(str(m.get("content", "")).encode()) for m in messages
-                )
-                input_cost += len(json.dumps(body["response_format"]).encode())
-                retry_budget = min(retry_budget, options["num_ctx"] - input_cost - 256)
-            if retry_budget > budget:
+            if choice.get("finish_reason") != "repetition":
+                budget = body.get("max_tokens") or 2048
+                retry_budget = max(budget, min(8192, max(4096, budget * 2)))
+                if "num_ctx" in options:
+                    input_cost = sum(
+                        len(str(m.get("content", "")).encode()) for m in messages
+                    )
+                    input_cost += len(json.dumps(body["response_format"]).encode())
+                    retry_budget = min(retry_budget, options["num_ctx"] - input_cost - 256)
+                if retry_budget <= budget:
+                    return progress
                 body["max_tokens"] = retry_budget
-                await post(url, body, headers)
+            await post(url, body, headers)
         return progress
     if endpoint.backend != "ollama":
         raise LlmError(f"Неизвестный backend: {endpoint.backend}")
