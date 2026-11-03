@@ -250,7 +250,7 @@ cases:
 
   - id: source_without_year
     stage: pzz.inputs
-    tags: [holdout]
+    tags: [holdout-seen]
     input:
       scenario_id: 1001
       user_query: "Проверь сценарий по зонам OSM"

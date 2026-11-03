@@ -372,7 +372,7 @@ cases:
 
   - id: code_vs_text_vri
     stage: pzz.columns
-    tags: [holdout]
+    tags: [holdout-seen]
     input:
       targets: [cadastral_vri_col]
       rows:
@@ -650,7 +650,7 @@ cases:
 
   - id: clear_school_high_confidence
     stage: compliance.mapping
-    tags: [holdout]
+    tags: [holdout-seen]
     input:
       candidates: *mapping_candidates
       groups:

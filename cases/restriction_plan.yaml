@@ -268,7 +268,7 @@ cases:
       - {path: "buffer_rules[*].buffer_size", eq: [200]}
 
   - id: normgraph_named_document_among_conflicting
-    tags: [normgraph, holdout]
+    tags: [normgraph, holdout-seen]
     input:
       user_query: "Проверь жилые дома по отступу от автомобильных дорог по СП 42.13330"
       normgraph_restrictions:

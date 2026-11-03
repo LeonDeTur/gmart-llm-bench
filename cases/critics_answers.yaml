@@ -424,7 +424,7 @@ cases:
 
   - id: general_scope_not_scenario
     stage: scenario.judge
-    tags: [holdout]
+    tags: [holdout-seen]
     input:
       user_query: "Сколько школ в сценарии?"
       observations:
