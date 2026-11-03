@@ -70,6 +70,8 @@ llmbench run --config config.yaml --profiles mixed --stages "orchestrator.*,prov
 llmbench run --config config.yaml --repeat 3 --label stability     # measure stability
 ```
 
+With multiple repeats, the report shows status agreement (formerly stability), pass^k (all repeats pass), pass@k (at least one passes), answer agreement (identical answers across repeats), and flaky cases.
+
 Profiles run one after another (two models on one shared server at once would distort latency);
 cases within a profile run in parallel (`run.concurrency`).
 
@@ -92,14 +94,18 @@ llmbench run --config config.yaml --tags holdout --label final            # fina
 
 | File | Contents |
 |---|---|
-| `report.md` | summary per profile, best profile per stage, stage × profile matrix (pass rate, score, latency, tokens, schema-invalid answers, retries), every failed check |
+| `report.md` | summary per profile, best profile per stage, stage × profile matrix (pass rate, quality score, latency, tokens, schema-invalid count/share, retries), repeat metrics and flaky cases, time/throughput (sum of latencies, wall-clock, cases/min, output tokens/s), every failed check |
 | `review.md` | answers of manual stages side by side per profile, for a human to read |
 | `grades.csv` | template for manual grades 0–2; once filled in, `llmbench report <dir>` folds them into the report |
 | `results.jsonl` | one record per case run: raw answer, parsed JSON, checks, tokens; `request_params` stores the final request body without `messages`, with the schema replaced by its hash and title |
 | `summary.json` | run summary |
-| `meta.json` | dataset version, benchmark commit and tracked changes in `llmbench`/`cases`/`data`, endpoints without `api_key` or URL userinfo/query/fragment, server versions (vLLM `/version`, Ollama `/api/version`), run parameters |
+| `meta.json` | dataset version, benchmark commit and tracked changes in `llmbench`/`cases`/`data`, endpoints without `api_key` or URL userinfo/query/fragment, server versions (vLLM `/version`, Ollama `/api/version`), run parameters, finish time (`finished`) and elapsed seconds (`wall_s`) |
 
 `--save-prompts` also stores the request itself in `results.jsonl`.
+
+The main score in `report.md` is quality from the case's own `expect` checks; `summary.json`
+keeps `score`/`mean_score` for compatibility. The sum of latencies is not run time: per-case
+latency starts after the client concurrency limit, including server queueing but no wait for a client slot.
 
 The `results/` directory of this repository holds runs of qwen3.8-27b on vLLM;
 `results/legacy/` holds earlier runs made by the previous, gMART-bound version of the runner
@@ -111,8 +117,8 @@ The `results/` directory of this repository holds runs of qwen3.8-27b on vLLM;
 
 - **auto** — the model answers with JSON that follows a schema; scored by the checks. An
   answer that does not parse as JSON is a case error; JSON that violates the schema fails the
-  synthetic `$ schema` check, affecting both the score and pass/fail. The "schema-invalid"
-  column remains.
+  synthetic `$ schema` check, affecting pass/fail and the schema-invalid share, but not the
+  quality score.
 - **manual** — free text (answers about norms, explanations, summaries, chat titles): formal
   checks (language, length, citations, prohibitions) plus a human grade in `review.md`.
 

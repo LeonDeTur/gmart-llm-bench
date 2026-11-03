@@ -16,6 +16,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from llmbench.checks import normalize
+
 GRADE_FIELDS = ["profile", "stage", "case", "repeat", "model", "grade", "comment"]
 
 
@@ -54,8 +56,77 @@ def load_grades(results_dir: Path) -> dict[tuple, float]:
     return grades
 
 
+def quality_score(record: dict[str, Any]) -> float | None:
+    checks = [c for c in record.get("checks") or [] if c["name"] != "$ schema"]
+    if not checks:
+        return None
+    total = sum(c.get("weight", 1) for c in checks)
+    return (
+        sum(c.get("weight", 1) for c in checks if c["passed"]) / total
+        if total
+        else 1.0
+    )
+
+
+def _quality_mean(items: list[dict]) -> float | None:
+    scores = [value for item in items if (value := quality_score(item)) is not None]
+    return _mean(scores) if scores else None
+
+
+def _schema_invalid(item: dict) -> bool:
+    return bool(item.get("schema_errors")) or any(
+        c["name"] == "$ schema" and not c["passed"]
+        for c in item.get("checks") or []
+    )
+
+
+def _repeat_metrics(items: list[dict], *, qualified: bool = False) -> dict[str, Any]:
+    by_case: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for item in items:
+        by_case[(item["stage"], item["case"])].append(item)
+    repeated = {
+        key: records
+        for key, records in by_case.items()
+        if len({r.get("repeat", 1) for r in records}) > 1
+    }
+    if not repeated:
+        return dict(
+            stability=None, pass_all_rate=None, pass_any_rate=None,
+            flaky_cases=None, answer_agreement=None,
+        )
+    flaky = []
+    agreements = 0
+    missing_answers = False
+    for (stage, case), records in sorted(repeated.items()):
+        if len({r["status"] for r in records}) > 1:
+            flaky.append(f"{stage}/{case}" if qualified else case)
+        field = "content" if records[0].get("kind") == "manual" else "output"
+        missing_answers |= any(field not in r for r in records)
+        answers = [
+            normalize(r.get(field))
+            if field == "content"
+            else json.dumps(r.get(field), sort_keys=True, ensure_ascii=False)
+            for r in records
+        ]
+        agreements += all(answer == answers[0] for answer in answers)
+    count = len(repeated)
+    return dict(
+        stability=1 - len(flaky) / count,
+        pass_all_rate=sum(
+            all(r["status"] == "pass" for r in rs) for rs in repeated.values()
+        ) / count,
+        pass_any_rate=sum(
+            any(r["status"] == "pass" for r in rs) for rs in repeated.values()
+        ) / count,
+        flaky_cases=flaky,
+        answer_agreement=agreements / count if not missing_answers else None,
+    )
+
+
 def summarize(
-    results: list[dict[str, Any]], grades: dict[tuple, float] | None = None
+    results: list[dict[str, Any]],
+    grades: dict[tuple, float] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     grades = grades or {}
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
@@ -67,15 +138,6 @@ def summarize(
     cells = []
     for (profile, stage), items in sorted(groups.items()):
         latencies = [item.get("latency_s") or 0.0 for item in items]
-        by_case: dict[str, set[str]] = defaultdict(set)
-        for item in items:
-            by_case[item["case"]].add(item["status"])
-        repeats = max(item.get("repeat", 1) for item in items)
-        stable = (
-            sum(len(statuses) == 1 for statuses in by_case.values()) / len(by_case)
-            if repeats > 1
-            else None
-        )
         graded = [
             grades[key]
             for item in items
@@ -99,13 +161,15 @@ def summarize(
                 "pass": sum(item["status"] == "pass" for item in items),
                 "fail": sum(item["status"] == "fail" for item in items),
                 "error": sum(item["status"] == "error" for item in items),
-                "schema_invalid": sum(
-                    bool(item.get("schema_errors")) for item in items
-                ),
+                "schema_invalid": sum(_schema_invalid(item) for item in items),
                 "retried": sum(bool(item.get("retried")) for item in items),
                 "pass_rate": sum(item["status"] == "pass" for item in items)
                 / len(items),
                 "mean_score": _mean([item.get("score") or 0.0 for item in items]),
+                "mean_quality_score": _quality_mean(items),
+                "schema_invalid_rate": sum(
+                    _schema_invalid(item) for item in items
+                ) / len(items),
                 "mean_latency_s": _mean(latencies),
                 "p95_latency_s": _p95(latencies),
                 "mean_input_tokens": _mean(
@@ -115,7 +179,7 @@ def summarize(
                     [item.get("output_tokens") or 0 for item in items]
                 ),
                 "mean_llm_calls": _mean([item.get("llm_calls") or 0 for item in items]),
-                "stability": stable,
+                **_repeat_metrics(items),
                 "graded": len(graded),
                 "mean_grade": _mean(graded) if graded else None,
             }
@@ -125,12 +189,35 @@ def summarize(
     for profile in sorted({cell["profile"] for cell in cells}):
         auto = [c for c in cells if c["profile"] == profile and c["kind"] == "auto"]
         runs = sum(c["runs"] for c in auto)
+        profile_items = [
+            r for r in results
+            if r["profile"] == profile and r.get("status") != "skipped"
+        ]
+        auto_items = [r for r in profile_items if r.get("kind") == "auto"]
+        quality_cells = [
+            c["mean_quality_score"] for c in auto
+            if c["mean_quality_score"] is not None
+        ]
+        wall_s = (meta or {}).get("wall_s")
         profiles[profile] = {
             "auto_runs": runs,
             "auto_pass_rate": (sum(c["pass"] for c in auto) / runs) if runs else None,
             # Every stage weighs the same, however many cases it has.
             "stage_macro_score": (
                 _mean([c["mean_score"] for c in auto]) if auto else None
+            ),
+            "mean_score": (
+                _mean([r.get("score") or 0.0 for r in auto_items])
+                if auto_items else None
+            ),
+            "mean_quality_score": _quality_mean(auto_items),
+            "stage_macro_quality_score": _mean(quality_cells) if quality_cells else None,
+            **_repeat_metrics(auto_items, qualified=True),
+            "wall_s": wall_s,
+            "cases_per_min": len(profile_items) * 60 / wall_s if wall_s else None,
+            "output_tokens_per_s": (
+                sum(r.get("output_tokens") or 0 for r in profile_items) / wall_s
+                if wall_s else None
             ),
             "errors": sum(c["error"] for c in cells if c["profile"] == profile),
             "schema_invalid": sum(
@@ -142,6 +229,11 @@ def summarize(
                 if c["profile"] == profile
             ),
         }
+        profiles[profile]["sum_latency_s"] = profiles[profile]["total_latency_s"]
+        profiles[profile]["schema_invalid_rate"] = (
+            sum(c["schema_invalid_rate"] * c["runs"] for c in cells
+                if c["profile"] == profile) / len(profile_items)
+        )
 
     best: dict[str, dict[str, Any]] = {}
     for stage in sorted({cell["stage"] for cell in cells}):
@@ -154,13 +246,18 @@ def summarize(
         else:
             top = max(
                 candidates,
-                key=lambda c: (c["pass_rate"], c["mean_score"], -c["mean_latency_s"]),
+                key=lambda c: (
+                    c["pass_rate"],
+                    c["mean_quality_score"] if c["mean_quality_score"] is not None else -1,
+                    -c["mean_latency_s"],
+                ),
             )
         best[stage] = {
             "profile": top["profile"],
             "model": top["model"],
             "pass_rate": top["pass_rate"],
             "mean_score": top["mean_score"],
+            "mean_quality_score": top["mean_quality_score"],
             "mean_grade": top["mean_grade"],
             "mean_latency_s": top["mean_latency_s"],
         }
@@ -168,7 +265,11 @@ def summarize(
 
 
 def _pct(value: float | None) -> str:
-    return "—" if value is None else f"{value * 100:.0f}%"
+    return "—" if value is None else f"{value * 100:.1f}%"
+
+
+def _number(value: float | None) -> str:
+    return "—" if value is None else f"{value:.1f}"
 
 
 def _short(value: Any, limit: int = 160) -> str:
@@ -203,31 +304,50 @@ def render_report(
         "",
         "## Итог по профилям (автоматически оцениваемые этапы)",
         "",
-        "| Профиль | Прогонов | Pass rate | Средний балл этапов | Ошибок | Невалидных по схеме | Суммарное время, с |",
+        "Балл качества учитывает только проверки смысла, без `$ schema`; кейсы без таких "
+        "проверок исключены из среднего. Pass rate по-прежнему требует успеха всех проверок.",
+        "",
+        "| Профиль | Прогонов | Pass rate | Качество | Качество (среднее этапов) | Ошибок | Невалидных по схеме (доля) |",
         "|---|---|---|---|---|---|---|",
     ]
     for name, data in summary["profiles"].items():
         lines.append(
             f"| {name} | {data['auto_runs']} | {_pct(data['auto_pass_rate'])} | "
-            f"{_pct(data['stage_macro_score'])} | {data['errors']} | "
-            f"{data['schema_invalid']} | {data['total_latency_s']:.0f} |"
+            f"{_pct(data['mean_quality_score'])} | {_pct(data['stage_macro_quality_score'])} | "
+            f"{data['errors']} | {data['schema_invalid']} ({_pct(data['schema_invalid_rate'])}) |"
+        )
+
+    lines += [
+        "", "## Время и пропускная способность", "",
+        "Wall-clock — время всего запуска; при нескольких профилях оно общее, без деления "
+        "между профилями. Пропускная способность каждого профиля рассчитана за это общее время.",
+        "Латентность кейса измеряется после клиентского ограничения параллелизма: "
+        "включает очередь на сервере, но не ожидание свободного клиентского слота.",
+        "",
+        "| Профиль | Сумма задержек, с | Wall-clock, с | Кейсов/мин | Выходных токенов/с |",
+        "|---|---|---|---|---|",
+    ]
+    for name, data in summary["profiles"].items():
+        lines.append(
+            f"| {name} | {data['sum_latency_s']:.1f} | {_number(data['wall_s'])} | "
+            f"{_number(data['cases_per_min'])} | {_number(data['output_tokens_per_s'])} |"
         )
 
     lines += ["", "## Лучший профиль по этапам", ""]
     lines += [
-        "| Этап | Профиль | Модель | Pass rate | Балл | Оценка (ручн.) | Латентность, с |"
+        "| Этап | Профиль | Модель | Pass rate | Качество | Оценка (ручн.) | Латентность, с |"
     ]
     lines += ["|---|---|---|---|---|---|---|"]
     for stage, top in summary["best_per_stage"].items():
         grade = "—" if top["mean_grade"] is None else f"{top['mean_grade']:.2f}"
         lines.append(
             f"| {stage} | {top['profile']} | {top['model']} | {_pct(top['pass_rate'])} | "
-            f"{_pct(top['mean_score'])} | {grade} | {top['mean_latency_s']:.1f} |"
+            f"{_pct(top['mean_quality_score'])} | {grade} | {top['mean_latency_s']:.1f} |"
         )
 
     lines += ["", "## Матрица этап × профиль", ""]
     lines += [
-        "| Этап | Тип | Профиль | Модель | Pass | Fail | Err | Балл | Стаб. | "
+        "| Этап | Тип | Профиль | Модель | Pass | Fail | Err | Качество | Невалидных по схеме (доля) | "
         "Лат. ср/p95, с | Токены вх/вых | Вызовов | Оценка | Повторы |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
@@ -239,11 +359,39 @@ def render_report(
         )
         lines.append(
             f"| {cell['stage']} | {cell['kind']} | {cell['profile']} | {cell['model']} | "
-            f"{cell['pass']} | {cell['fail']} | {cell['error']} | {_pct(cell['mean_score'])} | "
-            f"{_pct(cell['stability'])} | {cell['mean_latency_s']:.1f}/{cell['p95_latency_s']:.1f} | "
+            f"{cell['pass']} | {cell['fail']} | {cell['error']} | {_pct(cell['mean_quality_score'])} | "
+            f"{cell['schema_invalid']} ({_pct(cell['schema_invalid_rate'])}) | "
+            f"{cell['mean_latency_s']:.1f}/{cell['p95_latency_s']:.1f} | "
             f"{cell['mean_input_tokens']:.0f}/{cell['mean_output_tokens']:.0f} | "
             f"{cell['mean_llm_calls']:.1f} | {grade} | {cell['retried']} |"
         )
+
+    lines += [
+        "", "## Согласованность повторов", "",
+        "Итоги по профилю включают только автоматические этапы; доли рассчитаны по кейсам "
+        "с несколькими наблюдаемыми повторами, а не по отдельным прогонам.", "",
+        "| Профиль | Этап | Совпадение статусов | Pass^k | Pass@k | Совпадение ответов | Нестабильных кейсов |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    repeat_rows = [
+        (name, "Все авто", data) for name, data in summary["profiles"].items()
+    ] + [(c["profile"], c["stage"], c) for c in summary["cells"]]
+    for profile, stage, data in repeat_rows:
+        flaky_count = "—" if data["flaky_cases"] is None else str(len(data["flaky_cases"]))
+        lines.append(
+            f"| {profile} | {stage} | {_pct(data['stability'])} | "
+            f"{_pct(data['pass_all_rate'])} | {_pct(data['pass_any_rate'])} | "
+            f"{_pct(data['answer_agreement'])} | {flaky_count} |"
+        )
+    lines += ["", "### Нестабильные кейсы", ""]
+    flaky_cells = [c for c in summary["cells"] if c["flaky_cases"]]
+    for cell in flaky_cells:
+        lines.append(
+            f"- {cell['profile']} / {cell['stage']}: "
+            + ", ".join(f"`{_short(case)}`" for case in cell["flaky_cases"])
+        )
+    if not flaky_cells:
+        lines.append("—")
 
     failures = [r for r in results if r.get("status") in ("fail", "error")]
     lines += ["", f"## Провалы и ошибки ({len(failures)})", ""]
@@ -363,7 +511,7 @@ def write_grades_template(results_dir: Path, results: list[dict[str, Any]]) -> N
 def write_reports(results_dir: Path, meta: dict[str, Any]) -> dict[str, Any]:
     results = load_results(results_dir)
     write_grades_template(results_dir, results)
-    summary = summarize(results, load_grades(results_dir))
+    summary = summarize(results, load_grades(results_dir), meta)
     (results_dir / "summary.json").write_text(
         json.dumps({"meta": meta, **summary}, ensure_ascii=False, indent=2),
         encoding="utf-8",

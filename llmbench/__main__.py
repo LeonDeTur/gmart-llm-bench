@@ -7,6 +7,7 @@ import logging
 import re
 import subprocess
 import sys
+import time
 from collections import Counter
 from dataclasses import asdict
 from datetime import datetime
@@ -185,10 +186,16 @@ def _run(args):
     (out / "meta.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    run_started = time.perf_counter()
     asyncio.run(
         Runner(config, args.case_timeout, args.save_prompts).run(
             ready, profiles, out / "results.jsonl"
         )
+    )
+    meta["wall_s"] = time.perf_counter() - run_started
+    meta["finished"] = datetime.now().astimezone().isoformat()
+    (out / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     write_reports(out, meta)
     logger.info("Отчёты: %s", out)
