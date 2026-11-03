@@ -463,7 +463,11 @@ cases:
     stage: scenario.request
     input: {user_query: "Покажи на карте школы и детские сады"}
     expect:
-      - {path: operation, eq: unsupported}
+      # gMART сам переводит map/list с несколькими типами в unsupported (validate в
+      # classify_scenario_entity_request), поэтому map с двумя типами тоже верен.
+      # Ошибка — карта одного типа: requested_type не должен быть заполнен.
+      - {path: operation, in: [map, unsupported]}
+      - {path: requested_type, "null": true}
 
   - id: count_three_types
     stage: scenario.request
